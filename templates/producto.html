@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}{{ prod['nombre_normalizado'] | title }} — Price Tracker{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:1.5rem">
+  <a href="/precios" style="font-size:0.85rem; color:#636e72">← Volver a precios</a>
+</div>
+
+<section>
+  <h1>{{ prod['nombre_normalizado'] | title }}</h1>
+  {% if prod['categoria'] %}
+  <p style="color:#636e72; font-size:0.85rem; margin-top:0.3rem; margin-bottom:1.2rem">
+    Categoría: <strong>{{ prod['categoria'] }}</strong>
+  </p>
+  {% endif %}
+
+  <div class="dias-filter">
+    <span>Historial:</span>
+    {% for d in [7, 14, 30, 90] %}
+      <a href="/producto/{{ prod['id'] }}?dias={{ d }}" class="btn {% if dias == d %}active{% endif %}">{{ d }} días</a>
+    {% endfor %}
+  </div>
+
+  {% if datasets %}
+  <canvas id="chart" style="max-height:350px"></canvas>
+  <script>
+    const labels = {{ fechas | tojson }};
+    const datasets = [
+      {% for ds in datasets %}
+      {
+        label: {{ ds.label | tojson }},
+        data: {{ ds.data | tojson }},
+        borderColor: {{ ds.color | tojson }},
+        backgroundColor: {{ ds.color | tojson }} + '22',
+        tension: 0.3,
+        fill: true,
+        spanGaps: true,
+        pointRadius: 3,
+      },
+      {% endfor %}
+    ];
+    new Chart(document.getElementById('chart'), {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'top' },
+          tooltip: {
+            callbacks: {
+              label: ctx => ctx.parsed.y !== null
+                ? `${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString('es-AR', {minimumFractionDigits:2})}`
+                : null,
+            }
+          }
+        },
+        scales: {
+          y: {
+            ticks: {
+              callback: v => '$' + v.toLocaleString('es-AR')
+            }
+          }
+        }
+      }
+    });
+  </script>
+  {% else %}
+  <p style="color:#636e72">Sin datos de precio en los últimos {{ dias }} días.</p>
+  {% endif %}
+</section>
+
+{% if datasets %}
+<section>
+  <h2>Resumen</h2>
+  <table>
+    <thead><tr><th>Fuente</th><th>Primer precio</th><th>Último precio</th><th>Variación</th></tr></thead>
+    <tbody>
+    {% for ds in datasets %}
+    {% set datos_validos = ds.data | reject('none') | list %}
+    {% if datos_validos %}
+    {% set primero = datos_validos[0] %}
+    {% set ultimo = datos_validos[-1] %}
+    {% set variacion = ((ultimo - primero) / primero * 100) | round(1) if primero > 0 else 0 %}
+    <tr>
+      <td><span class="fuente-chip fuente-{{ ds.label | lower }}">{{ ds.label }}</span></td>
+      <td>$ {{ "%.2f"|format(primero) }}</td>
+      <td>$ {{ "%.2f"|format(ultimo) }}</td>
+      <td>
+        {% if variacion > 0 %}
+          <span class="badge-up">▲ {{ variacion }}%</span>
+        {% elif variacion < 0 %}
+          <span class="badge-down">▼ {{ variacion | abs }}%</span>
+        {% else %}
+          <span style="color:#636e72">sin cambio</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

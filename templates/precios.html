@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Precios — Price Tracker{% endblock %}
+
+{% block content %}
+<h1>Comparativa de precios</h1>
+
+<div class="dias-filter">
+  <span>Período:</span>
+  {% for d in [7, 14, 30, 60] %}
+    <a href="/precios?dias={{ d }}" class="btn {% if dias == d %}active{% endif %}">{{ d }} días</a>
+  {% endfor %}
+</div>
+
+<div style="margin-bottom:1.5rem; font-size:0.85rem; color:#636e72">
+  Datos de los últimos <strong>{{ dias }} días</strong>.
+  Productos en múltiples fuentes aparecen primero.
+</div>
+
+{% if not categorias %}
+<section><p style="color:#636e72">Sin datos para este período.</p></section>
+{% endif %}
+
+{% for cat, info in categorias.items() %}
+<section>
+  <h2>{{ cat | title }}</h2>
+  <div style="overflow-x:auto">
+  <table>
+    <thead>
+      <tr>
+        <th>Producto</th>
+        {% for f in info.fuentes %}<th>{{ f | title }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in info.tabla %}
+      <tr style="opacity: {{ '1' if row.num_fuentes > 1 else '0.7' }}">
+        <td>
+          {% if row.producto_id %}
+            <a href="/producto/{{ row.producto_id }}">{{ row.producto }}</a>
+          {% else %}
+            {{ row.producto }}
+          {% endif %}
+        </td>
+        {% for f in info.fuentes %}
+          {% if f in row.fuentes %}
+          {% set d = row.fuentes[f] %}
+          <td>
+            {% if d.url %}
+              <a href="{{ d.url }}" target="_blank">$ {{ "%.2f"|format(d.precio_actual) }}</a>
+            {% else %}
+              $ {{ "%.2f"|format(d.precio_actual) }}
+            {% endif %}
+            {% if d.variacion_pct %}
+              {% if d.variacion_pct > 0 %}
+                <span class="badge-up"> ▲{{ d.variacion_pct }}%</span>
+              {% else %}
+                <span class="badge-down"> ▼{{ d.variacion_pct | abs }}%</span>
+              {% endif %}
+            {% endif %}
+          </td>
+          {% else %}
+          <td style="color:#b2bec3">—</td>
+          {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endfor %}
+{% endblock %}

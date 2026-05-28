@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Price Tracker{% endblock %}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f5f6fa; color: #2d3436; }
+  nav { background: #2d3436; padding: 0 2rem; display: flex; align-items: center; gap: 2rem; }
+  nav .brand { color: white; font-size: 1.1rem; font-weight: bold; padding: 1rem 0; text-decoration: none; }
+  nav a { color: #b2bec3; text-decoration: none; padding: 1rem 0; font-size: 0.9rem; }
+  nav a:hover, nav a.active { color: white; }
+  .container { max-width: 1300px; margin: 2rem auto; padding: 0 1rem; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .card { background: white; border-radius: 8px; padding: 1.2rem; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .card .num { font-size: 2rem; font-weight: bold; }
+  .card .label { font-size: 0.8rem; color: #636e72; margin-top: 0.3rem; }
+  .card .sub { font-size: 0.75rem; color: #b2bec3; margin-top: 0.2rem; }
+  section { background: white; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  h1 { font-size: 1.4rem; margin-bottom: 1.2rem; }
+  h2 { font-size: 1.1rem; margin-bottom: 1rem; border-bottom: 2px solid #f5f6fa; padding-bottom: 0.5rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  th { background: #f5f6fa; padding: 0.6rem 0.8rem; text-align: left; font-size: 0.75rem; text-transform: uppercase; color: #636e72; position: sticky; top: 0; }
+  td { padding: 0.5rem 0.8rem; border-bottom: 1px solid #f5f6fa; }
+  tr:hover td { background: #fafbfc; }
+  a { color: #0984e3; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .badge-up { color: #e74c3c; font-size: 0.8em; font-weight: bold; }
+  .badge-down { color: #27ae60; font-size: 0.8em; font-weight: bold; }
+  .dias-filter { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; align-items: center; }
+  .dias-filter span { font-size: 0.85rem; color: #636e72; }
+  .btn { padding: 0.4rem 0.8rem; border-radius: 4px; border: 1px solid #dfe6e9; background: white; font-size: 0.8rem; cursor: pointer; text-decoration: none; color: #2d3436; }
+  .btn.active { background: #2d3436; color: white; border-color: #2d3436; }
+  .fuente-chip { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.7rem; font-weight: bold; color: white; }
+  .fuente-dia     { background: #e67e22; }
+  .fuente-anonima { background: #e74c3c; }
+  .fuente-encombo { background: #0984e3; }
+</style>
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+<nav>
+  <a class="brand" href="/">Price Tracker</a>
+  <a href="/" {% if request.path == '/' %}class="active"{% endif %}>Dashboard</a>
+  <a href="/precios" {% if request.path == '/precios' %}class="active"{% endif %}>Precios</a>
+</nav>
+<div class="container">
+{% block content %}{% endblock %}
+</div>
+</body>
+</html>

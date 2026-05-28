@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Price Tracker{% endblock %}
+
+{% block content %}
+<div class="cards">
+  <div class="card">
+    <div class="num">{{ stats.productos }}</div>
+    <div class="label">Productos</div>
+  </div>
+  <div class="card">
+    <div class="num">{{ stats.variantes }}</div>
+    <div class="label">Variantes</div>
+  </div>
+  <div class="card">
+    <div class="num">{{ "{:,}".format(stats.precios) }}</div>
+    <div class="label">Registros de precio</div>
+  </div>
+  <div class="card">
+    <div class="num">{{ stats.fuentes | length }}</div>
+    <div class="label">Fuentes</div>
+    <div class="sub">
+      {% for f in stats.fuentes %}
+        <span class="fuente-chip fuente-{{ f['nombre'] }}">{{ f['nombre'] }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="num" style="font-size:1.2rem">{{ stats.ultima_fecha or '—' }}</div>
+    <div class="label">Última actualización</div>
+  </div>
+</div>
+
+<section>
+  <h2>Highlights</h2>
+  <div class="dias-filter">
+    <span>Período:</span>
+    {% for d in [7, 14, 30] %}
+      <a href="/?dias={{ d }}" class="btn {% if dias == d %}active{% endif %}">{{ d }} días</a>
+    {% endfor %}
+  </div>
+
+  {% if highlights %}
+  <table>
+    <thead>
+      <tr>
+        <th>Producto</th>
+        <th>Fuente</th>
+        <th>Precio actual</th>
+        <th>Variación</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for h in highlights %}
+      <tr>
+        <td><a href="/producto/{{ h['id'] }}">{{ h['nombre_normalizado'] }}</a></td>
+        <td><span class="fuente-chip fuente-{{ h['fuente'] }}">{{ h['fuente'] }}</span></td>
+        <td>$ {{ "%.2f"|format(h['precio_actual']) }}</td>
+        <td>
+          {% if h['variacion_pct'] > 0 %}
+            <span class="badge-up">▲ {{ h['variacion_pct'] }}%</span>
+          {% else %}
+            <span class="badge-down">▼ {{ h['variacion_pct']|abs }}%</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#636e72; font-size:0.9rem">No hay variaciones mayores al 5% en los últimos {{ dias }} días.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Accesos rápidos</h2>
+  <div style="display:flex; gap:1rem; flex-wrap:wrap">
+    <a href="/precios" class="btn">Ver tabla de precios</a>
+    <a href="/precios?dias=14" class="btn">Precios — 14 días</a>
+    <a href="/precios?dias=30" class="btn">Precios — 30 días</a>
+  </div>
+</section>
+{% endblock %}
