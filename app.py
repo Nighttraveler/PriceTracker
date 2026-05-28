@@ -27,56 +27,82 @@ def index():
     return render_template("index.html", stats=stats, highlights=highlights, dias=dias)
 
 
+PER_PAGE = 50
+
 @app.route("/precios")
 def precios():
     db = get_db()
     dias = int(request.args.get("dias", 7))
+    page = max(1, int(request.args.get("page", 1)))
+    cat_filter = request.args.get("cat", "")
+
     filas = db.get_precios_rango(dias)
+    all_productos_map = {p["nombre_normalizado"]: p["id"] for p in db.get_all_productos()}
 
     por_cat = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {"registros": [], "url": ""})))
     for fila in filas:
         cat = fila["categoria"] or "Sin Categoría"
-        prod = fila["nombre_normalizado"]
-        fuente = fila["fuente"]
-        entry = por_cat[cat][prod][fuente]
-        entry["registros"].append({"precio": fila["precio"], "fecha": fila["fecha"]})
-        entry["url"] = fila["url_producto"]
+        por_cat[cat][fila["nombre_normalizado"]][fila["fuente"]]["registros"].append(
+            {"precio": fila["precio"], "fecha": fila["fecha"]}
+        )
+        por_cat[cat][fila["nombre_normalizado"]][fila["fuente"]]["url"] = fila["url_producto"]
 
-    categorias_data = {}
-    for cat, productos in sorted(por_cat.items()):
-        tabla = []
-        for producto, fuentes in sorted(productos.items()):
-            fila_out = {"producto": producto, "fuentes": {}, "producto_id": None}
-            for fuente, data in fuentes.items():
+    # Build flat sorted list: multi-source products first, then alpha
+    todas_las_filas = []
+    for cat in sorted(por_cat):
+        for producto, fuentes_data in sorted(por_cat[cat].items()):
+            row = {"producto": producto, "cat": cat, "fuentes": {}}
+            for fuente, data in fuentes_data.items():
                 regs = sorted(data["registros"], key=lambda r: r["fecha"])
                 precio_actual = regs[-1]["precio"]
                 precio_anterior = regs[0]["precio"] if len(regs) > 1 else None
                 variacion = None
                 if precio_anterior and precio_anterior > 0:
                     variacion = round((precio_actual - precio_anterior) / precio_anterior * 100, 1)
-                fila_out["fuentes"][fuente] = {
+                row["fuentes"][fuente] = {
                     "precio_actual": precio_actual,
                     "variacion_pct": variacion,
                     "url": data["url"],
                 }
-            fila_out["num_fuentes"] = len(fila_out["fuentes"])
-            tabla.append(fila_out)
-        tabla.sort(key=lambda x: (-x["num_fuentes"], x["producto"]))
-        categorias_data[cat] = tabla
+            row["num_fuentes"] = len(row["fuentes"])
+            row["producto_id"] = all_productos_map.get(producto)
+            # Pre-compute cheapest fuente (only meaningful with 2+ fuentes)
+            if row["num_fuentes"] >= 2:
+                row["fuente_mas_barata"] = min(
+                    row["fuentes"], key=lambda f: row["fuentes"][f]["precio_actual"]
+                )
+            else:
+                row["fuente_mas_barata"] = None
+            todas_las_filas.append(row)
 
-    # Enrich with producto_id for history links
-    all_productos = {p["nombre_normalizado"]: p["id"] for p in db.get_all_productos()}
-    for tabla in categorias_data.values():
-        for row in tabla:
-            row["producto_id"] = all_productos.get(row["producto"])
+    todas_las_filas.sort(key=lambda r: (-r["num_fuentes"], r["cat"], r["producto"]))
 
-    # Pre-compute fuentes present per category for template simplicity
-    categorias_con_fuentes = {}
-    for cat, tabla in categorias_data.items():
-        fuentes_cat = sorted({f for r in tabla for f in r["fuentes"]})
-        categorias_con_fuentes[cat] = {"tabla": tabla, "fuentes": fuentes_cat}
+    categorias_list = sorted(por_cat.keys())
+    fuentes_all = sorted({f for r in todas_las_filas for f in r["fuentes"]})
 
-    return render_template("precios.html", categorias=categorias_con_fuentes, dias=dias)
+    # Category filter
+    if cat_filter and cat_filter in por_cat:
+        filas_filtradas = [r for r in todas_las_filas if r["cat"] == cat_filter]
+    else:
+        cat_filter = ""
+        filas_filtradas = todas_las_filas
+
+    total = len(filas_filtradas)
+    total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
+    page = min(page, total_pages)
+    filas_pagina = filas_filtradas[(page - 1) * PER_PAGE: page * PER_PAGE]
+
+    return render_template(
+        "precios.html",
+        filas=filas_pagina,
+        fuentes=fuentes_all,
+        categorias_list=categorias_list,
+        cat_filter=cat_filter,
+        dias=dias,
+        page=page,
+        total_pages=total_pages,
+        total=total,
+    )
 
 
 @app.route("/producto/<int:producto_id>")
@@ -113,6 +139,47 @@ def producto(producto_id):
         fechas=fechas,
         datasets=datasets,
         dias=dias,
+    )
+
+
+@app.route("/ahorro")
+def ahorro():
+    db = get_db()
+    filas_cat = db.get_ahorro_por_categoria()
+    comparacion = db.get_comparacion_cruzada()
+
+    # Organizar por categoría → fuente
+    por_cat = defaultdict(dict)
+    fuentes_set = set()
+    for row in filas_cat:
+        cat = row["categoria"] or "otros"
+        fuente = row["fuente"]
+        por_cat[cat][fuente] = {
+            "avg": row["avg_precio"],
+            "min": row["min_precio"],
+            "max": row["max_precio"],
+            "n": row["n_productos"],
+        }
+        fuentes_set.add(fuente)
+
+    # Para cada categoría, encontrar la fuente más barata por promedio
+    fuentes = sorted(fuentes_set)
+    tabla_cat = []
+    for cat, fuentes_data in sorted(por_cat.items()):
+        if not fuentes_data:
+            continue
+        mas_barata = min(fuentes_data, key=lambda f: fuentes_data[f]["avg"])
+        tabla_cat.append({
+            "categoria": cat,
+            "fuentes": fuentes_data,
+            "mas_barata": mas_barata,
+        })
+
+    return render_template(
+        "ahorro.html",
+        tabla_cat=tabla_cat,
+        fuentes=fuentes,
+        comparacion=comparacion,
     )
 
 

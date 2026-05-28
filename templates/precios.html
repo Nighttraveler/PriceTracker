@@ -2,64 +2,78 @@
 {% block title %}Precios — Price Tracker{% endblock %}
 
 {% block content %}
-<h1>Comparativa de precios</h1>
-
-<div class="dias-filter">
-  <span>Período:</span>
-  {% for d in [7, 14, 30, 60] %}
-    <a href="/precios?dias={{ d }}" class="btn {% if dias == d %}active{% endif %}">{{ d }} días</a>
-  {% endfor %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h4 class="mb-0">Comparativa de precios</h4>
+  <span class="text-muted" style="font-size:0.85rem">{{ total }} productos</span>
 </div>
 
-<div style="margin-bottom:1.5rem; font-size:0.85rem; color:#636e72">
-  Datos de los últimos <strong>{{ dias }} días</strong>.
-  Productos en múltiples fuentes aparecen primero.
+<div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+  <div class="btn-group btn-group-sm">
+    {% for d in [7, 14, 30, 60] %}
+      <a href="/precios?dias={{ d }}&cat={{ cat_filter }}" class="btn btn-outline-secondary {% if dias == d %}active{% endif %}">{{ d }} días</a>
+    {% endfor %}
+  </div>
+
+  <form method="get" action="/precios" class="d-flex">
+    <input type="hidden" name="dias" value="{{ dias }}">
+    <select name="cat" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+      <option value="">Todas las categorías</option>
+      {% for cat in categorias_list %}
+        <option value="{{ cat }}" {% if cat == cat_filter %}selected{% endif %}>{{ cat | title }}</option>
+      {% endfor %}
+    </select>
+  </form>
 </div>
 
-{% if not categorias %}
-<section><p style="color:#636e72">Sin datos para este período.</p></section>
-{% endif %}
+{% if not filas %}
+<div class="alert alert-secondary">Sin datos para este período.</div>
+{% else %}
 
-{% for cat, info in categorias.items() %}
-<section>
-  <h2>{{ cat | title }}</h2>
-  <div style="overflow-x:auto">
-  <table>
-    <thead>
+<div class="card">
+  <div class="card-body p-0">
+  <div class="table-responsive">
+  <table class="table table-hover table-sm mb-0">
+    <thead class="table-light">
       <tr>
+        <th>Categoría</th>
         <th>Producto</th>
-        {% for f in info.fuentes %}<th>{{ f | title }}</th>{% endfor %}
+        {% for f in fuentes %}<th>{{ f | title }}</th>{% endfor %}
       </tr>
     </thead>
     <tbody>
-      {% for row in info.tabla %}
-      <tr style="opacity: {{ '1' if row.num_fuentes > 1 else '0.7' }}">
+      {% for row in filas %}
+      <tr class="{{ 'multi-source' if row.num_fuentes > 1 else '' }}">
+        <td class="text-muted" style="font-size:0.78rem; white-space:nowrap">{{ row.cat }}</td>
         <td>
           {% if row.producto_id %}
-            <a href="/producto/{{ row.producto_id }}">{{ row.producto }}</a>
+            <a href="/producto/{{ row.producto_id }}" class="text-decoration-none">{{ row.producto }}</a>
           {% else %}
             {{ row.producto }}
           {% endif %}
         </td>
-        {% for f in info.fuentes %}
+        {% for f in fuentes %}
           {% if f in row.fuentes %}
-          {% set d = row.fuentes[f] %}
-          <td>
-            {% if d.url %}
-              <a href="{{ d.url }}" target="_blank">$ {{ "%.2f"|format(d.precio_actual) }}</a>
-            {% else %}
-              $ {{ "%.2f"|format(d.precio_actual) }}
-            {% endif %}
-            {% if d.variacion_pct %}
-              {% if d.variacion_pct > 0 %}
-                <span class="badge-up"> ▲{{ d.variacion_pct }}%</span>
+            {% set d = row.fuentes[f] %}
+            {% set es_mas_barata = (row.fuente_mas_barata == f) %}
+            <td class="{{ 'cheapest' if es_mas_barata else '' }}">
+              {% if d.url %}
+                <a href="{{ d.url }}" target="_blank" class="text-decoration-none {% if not es_mas_barata %}text-dark{% endif %}">
+                  $ {{ "%.2f"|format(d.precio_actual) }}
+                </a>
               {% else %}
-                <span class="badge-down"> ▼{{ d.variacion_pct | abs }}%</span>
+                $ {{ "%.2f"|format(d.precio_actual) }}
               {% endif %}
-            {% endif %}
-          </td>
+              {% if d.variacion_pct %}
+                {% if d.variacion_pct > 0 %}
+                  <span class="badge-up"> ▲{{ d.variacion_pct }}%</span>
+                {% else %}
+                  <span class="badge-down"> ▼{{ d.variacion_pct | abs }}%</span>
+                {% endif %}
+              {% endif %}
+              {% if es_mas_barata %} <span title="más barato">★</span>{% endif %}
+            </td>
           {% else %}
-          <td style="color:#b2bec3">—</td>
+            <td class="text-muted">—</td>
           {% endif %}
         {% endfor %}
       </tr>
@@ -67,6 +81,37 @@
     </tbody>
   </table>
   </div>
-</section>
-{% endfor %}
+  </div>
+</div>
+
+{% if total_pages > 1 %}
+{% set base = "/precios?dias=" ~ dias ~ "&cat=" ~ cat_filter ~ "&page=" %}
+<nav class="mt-3 d-flex justify-content-center">
+  <ul class="pagination pagination-sm mb-0">
+    <li class="page-item {% if page == 1 %}disabled{% endif %}">
+      <a class="page-link" href="{{ base }}1">«</a>
+    </li>
+    <li class="page-item {% if page == 1 %}disabled{% endif %}">
+      <a class="page-link" href="{{ base ~ (page - 1) }}">‹</a>
+    </li>
+
+    {% set start = [1, page - 2] | max %}
+    {% set end = [total_pages, page + 2] | min %}
+    {% for p in range(start, end + 1) %}
+      <li class="page-item {% if p == page %}active{% endif %}">
+        <a class="page-link" href="{{ base ~ p }}">{{ p }}</a>
+      </li>
+    {% endfor %}
+
+    <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+      <a class="page-link" href="{{ base ~ (page + 1) }}">›</a>
+    </li>
+    <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+      <a class="page-link" href="{{ base ~ total_pages }}">»</a>
+    </li>
+  </ul>
+</nav>
+{% endif %}
+
+{% endif %}
 {% endblock %}

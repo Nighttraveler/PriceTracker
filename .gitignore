@@ -7,3 +7,4 @@ data/precios.db
 data/reportes/
 logs/
 .env
+.venv/

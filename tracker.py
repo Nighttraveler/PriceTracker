@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Hermes Price Tracker — Script principal
-Scrapea precios de La Anónima, Día y Encombo y los guarda en SQLite.
+Price Tracker — Script principal
+Scrapea precios de La Anónima, Día, Encombo y Carrefour y los guarda en SQLite.
 """
 
 import argparse
@@ -12,6 +12,7 @@ from normalizer import Normalizer
 from scrapers.anonima import AnonimaScraper
 from scrapers.dia import DiaScraper
 from scrapers.encombo import EncomboScraper
+from scrapers.carrefour import CarrefourScraper
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,9 +25,10 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 SCRAPERS = {
-    "anonima": AnonimaScraper,
-    "dia":     DiaScraper,
-    "encombo": EncomboScraper,
+    "anonima":   AnonimaScraper,
+    "dia":       DiaScraper,
+    "encombo":   EncomboScraper,
+    "carrefour": CarrefourScraper,
 }
 
 
@@ -82,7 +84,7 @@ def run(source: str, dry_run: bool = False, limit: int = None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Hermes Price Tracker")
     parser.add_argument("--source", default="all",
-                        choices=["all", "anonima", "dia", "encombo"])
+                        choices=["all", "anonima", "dia", "encombo", "carrefour"])
     parser.add_argument("--dry-run", action="store_true",
                         help="Scrapear sin guardar en DB")
     parser.add_argument("--limit", type=int, default=None,

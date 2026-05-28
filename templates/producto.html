@@ -6,104 +6,111 @@
 {% endblock %}
 
 {% block content %}
-<div style="margin-bottom:1.5rem">
-  <a href="/precios" style="font-size:0.85rem; color:#636e72">← Volver a precios</a>
-</div>
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/precios">Precios</a></li>
+    <li class="breadcrumb-item active">{{ prod['nombre_normalizado'] | title }}</li>
+  </ol>
+</nav>
 
-<section>
-  <h1>{{ prod['nombre_normalizado'] | title }}</h1>
-  {% if prod['categoria'] %}
-  <p style="color:#636e72; font-size:0.85rem; margin-top:0.3rem; margin-bottom:1.2rem">
-    Categoría: <strong>{{ prod['categoria'] }}</strong>
-  </p>
-  {% endif %}
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+      <div>
+        <h4 class="mb-1">{{ prod['nombre_normalizado'] | title }}</h4>
+        {% if prod['categoria'] %}
+        <span class="badge bg-secondary">{{ prod['categoria'] }}</span>
+        {% endif %}
+      </div>
+      <div class="btn-group btn-group-sm">
+        {% for d in [7, 14, 30, 90] %}
+          <a href="/producto/{{ prod['id'] }}?dias={{ d }}" class="btn btn-outline-secondary {% if dias == d %}active{% endif %}">{{ d }} días</a>
+        {% endfor %}
+      </div>
+    </div>
 
-  <div class="dias-filter">
-    <span>Historial:</span>
-    {% for d in [7, 14, 30, 90] %}
-      <a href="/producto/{{ prod['id'] }}?dias={{ d }}" class="btn {% if dias == d %}active{% endif %}">{{ d }} días</a>
-    {% endfor %}
-  </div>
-
-  {% if datasets %}
-  <canvas id="chart" style="max-height:350px"></canvas>
-  <script>
-    const labels = {{ fechas | tojson }};
-    const datasets = [
-      {% for ds in datasets %}
-      {
-        label: {{ ds.label | tojson }},
-        data: {{ ds.data | tojson }},
-        borderColor: {{ ds.color | tojson }},
-        backgroundColor: {{ ds.color | tojson }} + '22',
-        tension: 0.3,
-        fill: true,
-        spanGaps: true,
-        pointRadius: 3,
-      },
-      {% endfor %}
-    ];
-    new Chart(document.getElementById('chart'), {
-      type: 'line',
-      data: { labels, datasets },
-      options: {
-        responsive: true,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { position: 'top' },
-          tooltip: {
-            callbacks: {
-              label: ctx => ctx.parsed.y !== null
-                ? `${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString('es-AR', {minimumFractionDigits:2})}`
-                : null,
-            }
-          }
+    {% if datasets %}
+    <canvas id="chart" style="max-height:350px"></canvas>
+    <script>
+      const labels = {{ fechas | tojson }};
+      const datasets = [
+        {% for ds in datasets %}
+        {
+          label: {{ ds.label | tojson }},
+          data: {{ ds.data | tojson }},
+          borderColor: {{ ds.color | tojson }},
+          backgroundColor: {{ ds.color | tojson }} + '22',
+          tension: 0.3,
+          fill: true,
+          spanGaps: true,
+          pointRadius: 3,
         },
-        scales: {
-          y: {
-            ticks: {
-              callback: v => '$' + v.toLocaleString('es-AR')
+        {% endfor %}
+      ];
+      new Chart(document.getElementById('chart'), {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'top' },
+            tooltip: {
+              callbacks: {
+                label: ctx => ctx.parsed.y !== null
+                  ? `${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString('es-AR', {minimumFractionDigits:2})}`
+                  : null,
+              }
             }
+          },
+          scales: {
+            y: { ticks: { callback: v => '$' + v.toLocaleString('es-AR') } }
           }
         }
-      }
-    });
-  </script>
-  {% else %}
-  <p style="color:#636e72">Sin datos de precio en los últimos {{ dias }} días.</p>
-  {% endif %}
-</section>
+      });
+    </script>
+    {% else %}
+    <p class="text-muted">Sin datos de precio en los últimos {{ dias }} días.</p>
+    {% endif %}
+  </div>
+</div>
 
 {% if datasets %}
-<section>
-  <h2>Resumen</h2>
-  <table>
-    <thead><tr><th>Fuente</th><th>Primer precio</th><th>Último precio</th><th>Variación</th></tr></thead>
-    <tbody>
-    {% for ds in datasets %}
-    {% set datos_validos = ds.data | reject('none') | list %}
-    {% if datos_validos %}
-    {% set primero = datos_validos[0] %}
-    {% set ultimo = datos_validos[-1] %}
-    {% set variacion = ((ultimo - primero) / primero * 100) | round(1) if primero > 0 else 0 %}
-    <tr>
-      <td><span class="fuente-chip fuente-{{ ds.label | lower }}">{{ ds.label }}</span></td>
-      <td>$ {{ "%.2f"|format(primero) }}</td>
-      <td>$ {{ "%.2f"|format(ultimo) }}</td>
-      <td>
-        {% if variacion > 0 %}
-          <span class="badge-up">▲ {{ variacion }}%</span>
-        {% elif variacion < 0 %}
-          <span class="badge-down">▼ {{ variacion | abs }}%</span>
-        {% else %}
-          <span style="color:#636e72">sin cambio</span>
-        {% endif %}
-      </td>
-    </tr>
-    {% endif %}
-    {% endfor %}
-    </tbody>
-  </table>
-</section>
+<div class="card">
+  <div class="card-body">
+    <h5 class="card-title">Resumen del período</h5>
+    <div class="table-responsive">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr><th>Fuente</th><th>Primer precio</th><th>Último precio</th><th>Variación</th></tr>
+      </thead>
+      <tbody>
+      {% for ds in datasets %}
+      {% set datos_validos = ds.data | reject('none') | list %}
+      {% if datos_validos %}
+      {% set primero = datos_validos[0] %}
+      {% set ultimo = datos_validos[-1] %}
+      {% set variacion = ((ultimo - primero) / primero * 100) | round(1) if primero > 0 else 0 %}
+      <tr>
+        <td><span class="fuente-chip fuente-{{ ds.label | lower }}">{{ ds.label }}</span></td>
+        <td>$ {{ "%.2f"|format(primero) }}</td>
+        <td>$ {{ "%.2f"|format(ultimo) }}</td>
+        <td>
+          {% if variacion > 0 %}
+            <span class="badge-up">▲ {{ variacion }}%</span>
+          {% elif variacion < 0 %}
+            <span class="badge-down">▼ {{ variacion | abs }}%</span>
+          {% else %}
+            <span class="text-muted">sin cambio</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
 {% endif %}
 {% endblock %}

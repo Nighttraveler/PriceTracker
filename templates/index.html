@@ -2,81 +2,98 @@
 {% block title %}Dashboard — Price Tracker{% endblock %}
 
 {% block content %}
-<div class="cards">
-  <div class="card">
-    <div class="num">{{ stats.productos }}</div>
-    <div class="label">Productos</div>
-  </div>
-  <div class="card">
-    <div class="num">{{ stats.variantes }}</div>
-    <div class="label">Variantes</div>
-  </div>
-  <div class="card">
-    <div class="num">{{ "{:,}".format(stats.precios) }}</div>
-    <div class="label">Registros de precio</div>
-  </div>
-  <div class="card">
-    <div class="num">{{ stats.fuentes | length }}</div>
-    <div class="label">Fuentes</div>
-    <div class="sub">
-      {% for f in stats.fuentes %}
-        <span class="fuente-chip fuente-{{ f['nombre'] }}">{{ f['nombre'] }}</span>
-      {% endfor %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="num">{{ stats.productos }}</div>
+        <div class="label">Productos</div>
+      </div>
     </div>
   </div>
-  <div class="card">
-    <div class="num" style="font-size:1.2rem">{{ stats.ultima_fecha or '—' }}</div>
-    <div class="label">Última actualización</div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="num">{{ stats.variantes }}</div>
+        <div class="label">Variantes</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="num">{{ "{:,}".format(stats.precios) }}</div>
+        <div class="label">Registros de precio</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="num" style="font-size:1.1rem">{{ stats.ultima_fecha or '—' }}</div>
+        <div class="label mb-2">Última actualización</div>
+        {% for f in stats.fuentes %}
+          <span class="fuente-chip fuente-{{ f['nombre'] }}">{{ f['nombre'] }}</span>
+        {% endfor %}
+      </div>
+    </div>
   </div>
 </div>
 
-<section>
-  <h2>Highlights</h2>
-  <div class="dias-filter">
-    <span>Período:</span>
-    {% for d in [7, 14, 30] %}
-      <a href="/?dias={{ d }}" class="btn {% if dias == d %}active{% endif %}">{{ d }} días</a>
-    {% endfor %}
-  </div>
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+      <h5 class="card-title mb-0">Highlights</h5>
+      <div class="btn-group btn-group-sm">
+        {% for d in [7, 14, 30] %}
+          <a href="/?dias={{ d }}" class="btn btn-outline-secondary {% if dias == d %}active{% endif %}">{{ d }} días</a>
+        {% endfor %}
+      </div>
+    </div>
 
-  {% if highlights %}
-  <table>
-    <thead>
-      <tr>
-        <th>Producto</th>
-        <th>Fuente</th>
-        <th>Precio actual</th>
-        <th>Variación</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for h in highlights %}
-      <tr>
-        <td><a href="/producto/{{ h['id'] }}">{{ h['nombre_normalizado'] }}</a></td>
-        <td><span class="fuente-chip fuente-{{ h['fuente'] }}">{{ h['fuente'] }}</span></td>
-        <td>$ {{ "%.2f"|format(h['precio_actual']) }}</td>
-        <td>
-          {% if h['variacion_pct'] > 0 %}
-            <span class="badge-up">▲ {{ h['variacion_pct'] }}%</span>
-          {% else %}
-            <span class="badge-down">▼ {{ h['variacion_pct']|abs }}%</span>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p style="color:#636e72; font-size:0.9rem">No hay variaciones mayores al 5% en los últimos {{ dias }} días.</p>
-  {% endif %}
-</section>
-
-<section>
-  <h2>Accesos rápidos</h2>
-  <div style="display:flex; gap:1rem; flex-wrap:wrap">
-    <a href="/precios" class="btn">Ver tabla de precios</a>
-    <a href="/precios?dias=14" class="btn">Precios — 14 días</a>
-    <a href="/precios?dias=30" class="btn">Precios — 30 días</a>
+    {% if highlights %}
+    <div class="table-responsive">
+    <table class="table table-hover table-sm mb-0">
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th>Fuente</th>
+          <th>Precio actual</th>
+          <th>Variación</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in highlights %}
+        <tr>
+          <td><a href="/producto/{{ h['id'] }}" class="text-decoration-none">{{ h['nombre_normalizado'] }}</a></td>
+          <td><span class="fuente-chip fuente-{{ h['fuente'] }}">{{ h['fuente'] }}</span></td>
+          <td>$ {{ "%.2f"|format(h['precio_actual']) }}</td>
+          <td>
+            {% if h['variacion_pct'] > 0 %}
+              <span class="badge-up">▲ {{ h['variacion_pct'] }}%</span>
+            {% else %}
+              <span class="badge-down">▼ {{ h['variacion_pct']|abs }}%</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">No hay variaciones mayores al 5% en los últimos {{ dias }} días.</p>
+    {% endif %}
   </div>
-</section>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <h5 class="card-title">Accesos rápidos</h5>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="/precios" class="btn btn-outline-secondary btn-sm">Ver todos los precios</a>
+      <a href="/precios?dias=14" class="btn btn-outline-secondary btn-sm">Precios — 14 días</a>
+      <a href="/precios?dias=30" class="btn btn-outline-secondary btn-sm">Precios — 30 días</a>
+    </div>
+  </div>
+</div>
 {% endblock %}

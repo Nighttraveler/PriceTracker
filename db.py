@@ -27,7 +27,8 @@ class Database:
             id INTEGER PRIMARY KEY,
             nombre_normalizado TEXT NOT NULL UNIQUE,
             categoria TEXT,
-            unidad TEXT
+            unidad TEXT,
+            es_combo INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS variantes (
@@ -51,6 +52,12 @@ class Database:
         CREATE INDEX IF NOT EXISTS idx_precios_variante ON precios(variante_id);
         """)
         self.conn.commit()
+        # Migración: agregar es_combo si la tabla existía sin esa columna
+        try:
+            self.conn.execute("ALTER TABLE productos ADD COLUMN es_combo INTEGER NOT NULL DEFAULT 0")
+            self.conn.commit()
+        except Exception:
+            pass  # columna ya existe
 
     def get_or_create_fuente(self, nombre: str, url_base: str) -> int:
         cur = self.conn.execute(
@@ -79,11 +86,12 @@ class Database:
         return row["id"]
 
     def insert_producto(self, nombre_normalizado: str,
-                        categoria: str = None, unidad: str = None) -> int:
+                        categoria: str = None, unidad: str = None,
+                        es_combo: bool = False) -> int:
         self.conn.execute(
             """INSERT OR IGNORE INTO productos
-               (nombre_normalizado, categoria, unidad) VALUES (?, ?, ?)""",
-            (nombre_normalizado, categoria, unidad)
+               (nombre_normalizado, categoria, unidad, es_combo) VALUES (?, ?, ?, ?)""",
+            (nombre_normalizado, categoria, unidad, int(es_combo))
         )
         self.conn.commit()
         row = self.conn.execute(
@@ -104,8 +112,9 @@ class Database:
             "SELECT id, nombre_normalizado FROM productos"
         ).fetchall()
 
-    def get_precios_rango(self, dias: int = 7):
-        return self.conn.execute("""
+    def get_precios_rango(self, dias: int = 7, incluir_combos: bool = False):
+        combo_filter = "" if incluir_combos else "AND p.es_combo = 0"
+        return self.conn.execute(f"""
             SELECT p.nombre_normalizado, p.categoria, f.nombre as fuente,
                    pr.precio, pr.fecha, v.nombre_original, v.url_producto
             FROM precios pr
@@ -113,6 +122,7 @@ class Database:
             JOIN productos p ON v.producto_id = p.id
             JOIN fuentes f ON v.fuente_id = f.id
             WHERE pr.fecha >= date('now', ? || ' days')
+            {combo_filter}
             ORDER BY p.nombre_normalizado, pr.fecha DESC
         """, (f"-{dias}",)).fetchall()
 
@@ -143,6 +153,56 @@ class Database:
             "SELECT id, nombre_normalizado, categoria FROM productos WHERE id = ?",
             (producto_id,)
         ).fetchone()
+
+    def get_ahorro_por_categoria(self):
+        """Precio promedio por categoría y fuente (últimos precios disponibles)."""
+        return self.conn.execute("""
+            WITH latest AS (
+                SELECT v.producto_id, v.fuente_id, pr.precio
+                FROM precios pr
+                JOIN variantes v ON pr.variante_id = v.id
+                WHERE date(pr.fecha) = (SELECT MAX(date(fecha)) FROM precios)
+            )
+            SELECT p.categoria, f.nombre as fuente,
+                   ROUND(AVG(l.precio), 2) as avg_precio,
+                   ROUND(MIN(l.precio), 2) as min_precio,
+                   ROUND(MAX(l.precio), 2) as max_precio,
+                   COUNT(DISTINCT l.producto_id) as n_productos
+            FROM latest l
+            JOIN productos p ON l.producto_id = p.id
+            JOIN fuentes f ON l.fuente_id = f.id
+            WHERE p.es_combo = 0
+            GROUP BY p.categoria, f.nombre
+            ORDER BY p.categoria, avg_precio
+        """).fetchall()
+
+    def get_comparacion_cruzada(self):
+        """Productos en 2+ fuentes con diferencia de precio."""
+        return self.conn.execute("""
+            WITH latest AS (
+                SELECT v.producto_id, v.fuente_id, f.nombre as fuente, pr.precio
+                FROM precios pr
+                JOIN variantes v ON pr.variante_id = v.id
+                JOIN fuentes f ON v.fuente_id = f.id
+                WHERE date(pr.fecha) = (SELECT MAX(date(fecha)) FROM precios)
+            ),
+            multi AS (
+                SELECT producto_id FROM latest
+                GROUP BY producto_id HAVING COUNT(DISTINCT fuente_id) >= 2
+            )
+            SELECT p.id, p.nombre_normalizado, p.categoria,
+                   MIN(l.precio) as precio_min,
+                   MAX(l.precio) as precio_max,
+                   ROUND((MAX(l.precio) - MIN(l.precio)) * 100.0 / MIN(l.precio), 1) as diff_pct,
+                   COUNT(DISTINCT l.fuente_id) as n_fuentes
+            FROM latest l
+            JOIN productos p ON l.producto_id = p.id
+            JOIN multi m ON l.producto_id = m.producto_id
+            WHERE p.es_combo = 0
+            GROUP BY l.producto_id
+            ORDER BY diff_pct DESC
+            LIMIT 100
+        """).fetchall()
 
     def get_highlights(self, dias: int = 7, min_variacion: float = 5.0):
         """Productos con mayor variación de precio en el período."""

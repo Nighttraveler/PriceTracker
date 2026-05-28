@@ -35,6 +35,15 @@ def limpiar(nombre: str) -> str:
     return nombre
 
 
+COMBO_PALABRAS = {"combo", "pack", "kit", "caja x", "promo"}
+
+def es_combo(nombre_limpio: str) -> bool:
+    for palabra in COMBO_PALABRAS:
+        if nombre_limpio.startswith(palabra) or f" {palabra} " in nombre_limpio:
+            return True
+    return False
+
+
 def detectar_categoria(nombre_limpio: str) -> str:
     for categoria, palabras_clave in CATEGORIAS.items():
         for palabra in palabras_clave:
@@ -100,6 +109,7 @@ class Normalizer:
         # No encontrado → crear nuevo
         categoria = detectar_categoria(nombre_limpio)
         unidad = normalizar_unidad(nombre_limpio)
-        nuevo_id = self.db.insert_producto(nombre_limpio, categoria, unidad)
+        combo = es_combo(nombre_limpio)
+        nuevo_id = self.db.insert_producto(nombre_limpio, categoria, unidad, es_combo=combo)
         self._cache[nombre_limpio] = nuevo_id
         return nuevo_id
