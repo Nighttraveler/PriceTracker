@@ -32,6 +32,15 @@ class TestEsCombo:
         assert es_combo("combo dove shampoo y acondicionador") is True
         assert es_combo("combo familiar galletitas") is True
 
+    def test_kit_prefix(self):
+        assert es_combo("kit portable cepillo total 12 colgate x 30 g") is True
+
+    def test_pack_prefix(self):
+        assert es_combo("pack ahorro detergente skip x 3") is True
+
+    def test_promo_prefix(self):
+        assert es_combo("promo 2x1 shampoo head shoulders") is True
+
     def test_not_combo(self):
         assert es_combo("leche entera 1 lt") is False
         assert es_combo("galletitas dulces arcor") is False
@@ -53,6 +62,34 @@ class TestDetectarCategoria:
     # Categorías nuevas
     def test_combos(self):
         assert detectar_categoria("combo dove shampoo cuidado") == "combos"
+
+    def test_kit_es_combo(self):
+        # Bug anterior: kit → es_combo=True pero categoria=otros
+        assert detectar_categoria("kit portable cepillo total 12 colgate x 30 g") == "combos"
+
+    def test_pack_es_combo(self):
+        assert detectar_categoria("pack ahorro detergente skip x 3") == "combos"
+
+    def test_promo_es_combo(self):
+        assert detectar_categoria("promo 2x1 shampoo head shoulders") == "combos"
+
+    def test_combo_tiene_prioridad_sobre_otras_categorias(self):
+        # Aunque el nombre contenga keywords de higiene/limpieza, si es combo → combos
+        assert detectar_categoria("combo shampoo dove y acondicionador") == "combos"
+        assert detectar_categoria("kit limpieza hogar detergente lavandina") == "combos"
+
+    def test_consistencia_es_combo_y_categoria(self):
+        # Invariante: si es_combo() es True, detectar_categoria() siempre retorna "combos"
+        casos = [
+            "combo familiar galletitas arcor x 3",
+            "kit cuidado personal dove",
+            "pack ahorro yerba mate x 2",
+            "promo verano gaseosa x 6",
+        ]
+        for nombre in casos:
+            assert es_combo(nombre) is True
+            assert detectar_categoria(nombre) == "combos", \
+                f"Inconsistencia en '{nombre}': es_combo=True pero categoria != combos"
 
     def test_galletitas(self):
         assert detectar_categoria("galletitas dulces arcor x 100 g") == "galletitas"
