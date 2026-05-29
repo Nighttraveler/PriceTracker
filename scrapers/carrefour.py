@@ -8,7 +8,6 @@ import requests
 
 log = logging.getLogger(__name__)
 
-# category_id → slug (solo supermercado, sin electro/ropa/etc)
 CATEGORIAS = {
     161:  "almacen",
     222:  "desayuno-y-merienda",
@@ -30,6 +29,9 @@ HEADERS = {
 }
 
 PAGE_SIZE = 50
+VTEX_MAX_OFFSET = 2500   # VTEX catalog API rechaza requests con _from >= 2500 (HTTP 400)
+MAX_RETRIES = 3
+RETRY_BASE_WAIT = 5      # segundos base para backoff exponencial en 429
 
 
 class CarrefourScraper:
@@ -40,20 +42,30 @@ class CarrefourScraper:
             f"{self.url_base}/api/catalog_system/pub/products/search"
             f"?fq=C:{cat_id}&_from={from_}&_to={from_ + PAGE_SIZE - 1}"
         )
-        time.sleep(random.uniform(0.5, 1.2))
-        resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.raise_for_status()
 
-        # resources header: "0-49/6016"
-        total = 0
-        resources = resp.headers.get("resources", "")
-        if "/" in resources:
-            try:
-                total = int(resources.split("/")[1])
-            except ValueError:
-                pass
+        for attempt in range(MAX_RETRIES):
+            time.sleep(random.uniform(0.5, 1.2))
+            resp = requests.get(url, headers=HEADERS, timeout=15)
 
-        return resp.json(), total
+            if resp.status_code == 429:
+                wait = RETRY_BASE_WAIT * (2 ** attempt)
+                log.warning(f"429 rate limit en offset {from_}, reintentando en {wait}s (intento {attempt + 1}/{MAX_RETRIES})")
+                time.sleep(wait)
+                continue
+
+            resp.raise_for_status()
+
+            total = 0
+            resources = resp.headers.get("resources", "")
+            if "/" in resources:
+                try:
+                    total = int(resources.split("/")[1])
+                except ValueError:
+                    pass
+
+            return resp.json(), total
+
+        raise requests.exceptions.RetryError(f"429 persistente después de {MAX_RETRIES} intentos en offset {from_}")
 
     def fetch_all(self, limit: int = None) -> list[dict]:
         productos = []
@@ -63,7 +75,7 @@ class CarrefourScraper:
             from_ = 0
             total = None
 
-            while True:
+            while from_ < VTEX_MAX_OFFSET:
                 try:
                     items, total_cat = self._get_page(cat_id, from_)
                     if total is None:
