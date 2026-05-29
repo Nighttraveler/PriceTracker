@@ -175,8 +175,14 @@ def es_combo(nombre_limpio: str) -> bool:
 
 
 def detectar_categoria(nombre_limpio: str) -> str:
+    # Los combos tienen prioridad antes de cualquier otra categoría
+    if es_combo(nombre_limpio):
+        return "combos"
+
     palabras = set(nombre_limpio.split())
     for categoria, claves in CATEGORIAS.items():
+        if categoria == "combos":
+            continue  # ya manejado arriba
         for clave in claves:
             if ' ' in clave:
                 # Multi-word: substring en el nombre completo
