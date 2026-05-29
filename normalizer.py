@@ -59,8 +59,8 @@ CATEGORIAS = {
         "oregano", "aji molido", "pimienta", "comino", "curcuma",
         "pimenton", "paprika", "canela", "jengibre", "nuez moscada",
         "albahaca", "laurel", "romero", "tomillo", "coriandro",
-        "condimento ", "especia", "curry", "ajo en polvo",
-        "mermelada", "dulce de batata", "miel ",
+        "condimento", "especia", "curry", "ajo en polvo",
+        "mermelada", "dulce de batata", "miel",
         "vinagreta", "alioli", "caesar",
     ],
 
@@ -73,7 +73,7 @@ CATEGORIAS = {
 
     # ── Almacén ─────────────────────────────────────────────────────────────────
     "almacen": [
-        "arroz", "fideo", "harina", "azucar", "aceite", "sal ",
+        "arroz", "fideo", "harina", "azucar", "aceite", "sal",
         "vinagre", "polenta", "lenteja", "garbanzo", "poroto",
         "atun", "yerba", "avena", "granola", "caldo",
         "endulzante", "edulcorante", "stevia", "maizena",
@@ -81,6 +81,13 @@ CATEGORIAS = {
         "tapas para", "tapas de empanada",
         "aceite de oliva", "aceite de girasol",
         "gelatina", "gelatina en polvo",
+    ],
+
+    # ── Congelados (antes de carnes: nuggets de pollo → congelados, no carnes) ──
+    "congelados": [
+        "helado", "empanada", "pizza", "hamburguesa",
+        "nugget", "bocadito", "precocido", "rebozado",
+        "bastones de", "acelga congelada", "espinaca congelada",
     ],
 
     # ── Carnes ──────────────────────────────────────────────────────────────────
@@ -93,19 +100,19 @@ CATEGORIAS = {
 
     # ── Panificados ─────────────────────────────────────────────────────────────
     "panificados": [
-        "pan ", "tostada", "bizcocho", "factura", "medialuna",
+        "pan", "tostada", "bizcocho", "factura", "medialuna",
         "budin", "magdalena", "baguette", "lactal", "brioche",
         "tortita", "chipas", "chipa",
     ],
 
     # ── Bebidas ─────────────────────────────────────────────────────────────────
     "bebidas": [
-        "gaseosa", "jugo ", "cerveza", "vino ", "soda",
-        "whisky", "vodka", "gin ", "fernet", "ron ",
+        "gaseosa", "jugo", "cerveza", "vino", "soda",
+        "whisky", "vodka", "gin", "fernet", "ron",
         "aperitivo", "amargo", "tonica",
         "agua mineral", "agua saborizada", "agua con gas",
         "agua sin gas", "agua de mesa", "agua tonica",
-        "te ", "mate ", "tisana", "nescafe", "cafe ",
+        "te", "mate", "tisana", "nescafe", "cafe",
         "isotonica", "energizante", "bebida lactea",
         "nectar", "jugo de naranja",
     ],
@@ -118,7 +125,7 @@ CATEGORIAS = {
         "jabon", "alcohol etilico", "alcohol puro", "alcohol gel",
         "alcohol en gel", "insecticida", "esponja", "quitamanchas",
         "abrillantador", "repelente", "aerosol desinfectante",
-        "servilleta", "toalla de papel", "trapo ", "pano ",
+        "servilleta", "toalla de papel", "trapo", "pano",
         "limpiador", "desinfectante",
     ],
 
@@ -139,13 +146,6 @@ CATEGORIAS = {
         "gel de ducha", "jabon liquido",
         "locion", "serum", "mascarilla",
         "toallita",
-    ],
-
-    # ── Congelados ───────────────────────────────────────────────────────────────
-    "congelados": [
-        "helado", "empanada", "pizza", "hamburguesa",
-        "nugget", "bocadito", "precocido", "rebozado",
-        "bastones de", "acelga congelada", "espinaca congelada",
     ],
 
     # ── Verdulería / frutería ─────────────────────────────────────────────────
