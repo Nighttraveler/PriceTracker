@@ -16,9 +16,8 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 def generar_reporte(db: Database, dias: int, output: str):
     stats = db.stats()
     highlights = db.get_highlights(dias=dias, min_variacion=15.0)
-    comparacion = db.get_comparacion_cruzada()
+    productos_multi, carrito = db.get_carrito_optimo(top_n=20)
 
-    # Precio promedio por categoría/fuente (mismo procesamiento que /ahorro)
     filas_cat = db.get_ahorro_por_categoria()
     por_cat = defaultdict(dict)
     fuentes_set = set()
@@ -44,7 +43,8 @@ def generar_reporte(db: Database, dias: int, output: str):
         dias=dias,
         stats=stats,
         highlights=highlights,
-        comparacion=comparacion,
+        carrito=carrito,
+        n_productos_multi=len(productos_multi),
         tabla_cat=tabla_cat,
         fuentes=fuentes,
         n_subas=n_subas,

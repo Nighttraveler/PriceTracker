@@ -149,7 +149,7 @@ def producto(producto_id):
 def ahorro():
     db = get_db()
     filas_cat = db.get_ahorro_por_categoria()
-    comparacion = db.get_comparacion_cruzada()
+    productos_multi, carrito = db.get_carrito_optimo(top_n=20)
 
     # Organizar por categoría → fuente
     por_cat = defaultdict(dict)
@@ -165,7 +165,6 @@ def ahorro():
         }
         fuentes_set.add(fuente)
 
-    # Para cada categoría, encontrar la fuente más barata por promedio
     fuentes = sorted(fuentes_set)
     tabla_cat = []
     for cat, fuentes_data in sorted(por_cat.items()):
@@ -182,7 +181,42 @@ def ahorro():
         "ahorro.html",
         tabla_cat=tabla_cat,
         fuentes=fuentes,
-        comparacion=comparacion,
+        carrito=carrito,
+        n_productos_multi=len(productos_multi),
+    )
+
+
+@app.route("/buscar")
+def buscar():
+    db = get_db()
+    q = request.args.get("q", "").strip()
+    fuentes_sel = request.args.getlist("fuente")
+    cats_sel = request.args.getlist("cat")
+
+    all_fuentes = db.get_all_fuentes()
+    all_cats = db.get_all_categorias()
+
+    resultados = []
+    buscado = bool(q or fuentes_sel or cats_sel)
+    if buscado:
+        resultados = db.buscar_productos(
+            q=q,
+            fuentes=fuentes_sel or None,
+            categorias=cats_sel or None,
+        )
+
+    fuentes_cols = sorted({f for p in resultados for f in p["fuentes"]})
+
+    return render_template(
+        "buscar.html",
+        q=q,
+        fuentes_sel=fuentes_sel,
+        cats_sel=cats_sel,
+        all_fuentes=all_fuentes,
+        all_cats=all_cats,
+        resultados=resultados,
+        fuentes_cols=fuentes_cols,
+        buscado=buscado,
     )
 
 

@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from normalizer import limpiar, es_combo, detectar_categoria, normalizar_unidad, Normalizer
+from normalizer import limpiar, es_combo, detectar_categoria, normalizar_unidad, Normalizer, _normalizar_para_match
 
 
 # ── limpiar ──────────────────────────────────────────────────────────────────
@@ -231,6 +231,52 @@ class TestNormalizarUnidad:
         assert normalizar_unidad("aceite x 1,5l") == "1500ml"
 
 
+# ── _normalizar_para_match ────────────────────────────────────────────────────
+
+class TestNormalizarParaMatch:
+    """_normalizar_para_match normaliza solo para comparación, no afecta nombres guardados."""
+
+    def test_cc_se_convierte_a_ml(self):
+        assert _normalizar_para_match(limpiar("acondicionador 400 cc")) == "acondicionador 400ml"
+
+    def test_numero_y_unidad_se_unen(self):
+        # "400 ml" → "400ml" para que token_sort_ratio los trate como un solo token
+        assert _normalizar_para_match(limpiar("jugo 500 ml")) == "jugo 500ml"
+        assert _normalizar_para_match(limpiar("aceite 900 g")) == "aceite 900g"
+
+    def test_grs_se_convierte_a_g(self):
+        assert _normalizar_para_match(limpiar("arroz 500 grs")) == "arroz 500g"
+
+    def test_stopwords_removidos(self):
+        assert _normalizar_para_match("leche con vitaminas") == "leche vitaminas"
+        assert _normalizar_para_match("vitamina a y e") == "vitamina a e"
+        assert _normalizar_para_match("aceite x 500ml") == "aceite 500ml"
+
+    def test_no_afecta_nombres_sin_conectores(self):
+        limpio = limpiar("Acondicionador Dove Hidratacion Vitamina A E 400ml")
+        assert _normalizar_para_match(limpio) == "acondicionador dove hidratacion vitamina a e 400ml"
+
+    def test_caso_real_dove_score_supera_umbral(self):
+        """Los dos nombres del mismo producto deben quedar idénticos tras la normalización."""
+        from rapidfuzz import fuzz
+        m1 = _normalizar_para_match(limpiar("Acondicionador Dove Hidratacion Vitamina A E 400ml"))
+        m2 = _normalizar_para_match(limpiar("Acondicionador Hidratacion con Vitamina A y E Dove x 400 cc"))
+        assert fuzz.token_sort_ratio(m1, m2) >= 98, (
+            f"Score {fuzz.token_sort_ratio(m1, m2):.1f} insuficiente.\n  m1={m1}\n  m2={m2}"
+        )
+
+    def test_diferente_tamanio_no_matchea(self):
+        """400ml y 200ml deben seguir siendo distintos tras la normalización."""
+        from rapidfuzz import fuzz
+        m1 = _normalizar_para_match(limpiar("Acondicionador Dove Vitamina A E 400ml"))
+        m2 = _normalizar_para_match(limpiar("Acondicionador Dove Vitamina A E 200ml"))
+        # Los números distintos son capturados por el guard en Normalizer,
+        # pero también el score debe bajar por el token diferente.
+        assert fuzz.token_sort_ratio(m1, m2) < 98, (
+            "400ml y 200ml son productos distintos — el score no debe superar el umbral"
+        )
+
+
 # ── Normalizer (clase con DB) ─────────────────────────────────────────────────
 
 class TestNormalizerClass:
@@ -274,6 +320,32 @@ class TestNormalizerClass:
 
         _, kwargs = self.mock_db.insert_producto.call_args
         assert kwargs.get("es_combo") is True or self.mock_db.insert_producto.call_args[0][3] == 1
+
+    def test_fusiona_mismo_producto_descrito_distinto_entre_fuentes(self):
+        """Caso real: Carrefour y Día describen el mismo acondicionador Dove distinto."""
+        self.mock_db.get_all_productos.return_value = [
+            {"id": 1, "nombre_normalizado": "acondicionador dove hidratacion vitamina a e 400ml"}
+        ]
+        resultado = self.normalizer.obtener_o_crear_producto(
+            "Acondicionador Hidratación con Vitamina A y E Dove x 400 cc",
+            fuente_id=2,
+        )
+        assert resultado == 1, (
+            "Mismo producto descrito distinto por dos fuentes debe mapearse al mismo ID"
+        )
+        self.mock_db.insert_producto.assert_not_called()
+
+    def test_no_fusiona_mismo_producto_diferente_tamanio(self):
+        """400ml y 200ml son SKUs distintos y no deben fusionarse."""
+        self.mock_db.get_all_productos.return_value = [
+            {"id": 1, "nombre_normalizado": "acondicionador dove hidratacion vitamina a e 400ml"}
+        ]
+        self.mock_db.insert_producto.return_value = 2
+        resultado = self.normalizer.obtener_o_crear_producto(
+            "Acondicionador Dove Hidratación Vitamina A+E 200ml",
+            fuente_id=2,
+        )
+        assert resultado == 2, "400ml y 200ml son tamaños distintos — no deben fusionarse"
 
     def test_cache_evita_queries_repetidas(self):
         self.mock_db.get_all_productos.return_value = []

@@ -4,8 +4,16 @@
 {% block extra_head %}
 <style>
   .cheapest-cell { background: #d1e7dd; font-weight: 600; }
-  .expensive-cell { background: #f8d7da; }
   .diff-badge { font-size: 0.75rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 4px; }
+  .fuente-chip { padding: 0.15rem 0.55rem; border-radius: 10px; font-size: 0.72rem; font-weight: 700; color: #fff; display: inline-block; }
+  .fuente-dia       { background: #e67e22; }
+  .fuente-anonima   { background: #dc3545; }
+  .fuente-encombo   { background: #0d6efd; }
+  .fuente-carrefour { background: #004A96; }
+  .cart-card-header { display: flex; align-items: center; gap: 0.5rem; }
+  .cart-total-row td { font-weight: 700; background: #f8f9fa; }
+  .ahorro-badge { font-size: 0.72rem; color: #198754; font-weight: 600; }
+  .precio-otras { font-size: 0.72rem; color: #adb5bd; text-decoration: line-through; }
 </style>
 {% endblock %}
 
@@ -59,54 +67,74 @@
     </div>
   </div>
 
-  <!-- Comparación cruzada: mismo producto en distintas fuentes -->
+  <!-- Carrito óptimo por fuente -->
   <div class="col-12">
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <strong>Mismos productos — diferencia entre fuentes</strong>
-        <span class="text-muted" style="font-size:0.8rem">{{ comparacion | length }} productos en 2+ fuentes</span>
+        <strong>Carrito óptimo — dónde comprar cada producto</strong>
+        <span class="text-muted" style="font-size:0.8rem">{{ n_productos_multi }} productos en 2+ fuentes · top 20 mayor diferencia</span>
       </div>
-      {% if comparacion %}
-      <div class="table-responsive">
-      <table class="table table-hover table-sm mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>Producto</th>
-            <th>Categoría</th>
-            <th class="text-end">Precio mín</th>
-            <th class="text-end">Precio máx</th>
-            <th class="text-center">Diferencia</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in comparacion %}
-          <tr>
-            <td>
-              <a href="/producto/{{ row['id'] }}" class="text-decoration-none">
-                {{ row['nombre_normalizado'] }}
-              </a>
-            </td>
-            <td class="text-muted" style="font-size:0.8rem">{{ row['categoria'] or '—' }}</td>
-            <td class="text-end text-success fw-semibold">${{ "{:,.2f}".format(row['precio_min']) }}</td>
-            <td class="text-end text-danger">${{ "{:,.2f}".format(row['precio_max']) }}</td>
-            <td class="text-center">
-              {% set diff = row['diff_pct'] %}
-              {% if diff >= 50 %}
-                <span class="diff-badge bg-danger text-white">▲ {{ diff }}%</span>
-              {% elif diff >= 20 %}
-                <span class="diff-badge bg-warning text-dark">▲ {{ diff }}%</span>
-              {% else %}
-                <span class="diff-badge bg-light text-dark border">▲ {{ diff }}%</span>
-              {% endif %}
-            </td>
-          </tr>
+      {% if carrito %}
+      <div class="card-body pb-0">
+        <div class="row g-3">
+          {% for bloque in carrito %}
+          <div class="col-12 col-md-6 col-xl-3">
+            <div class="card h-100 border-0 shadow-sm">
+              <div class="card-header cart-card-header bg-white border-bottom">
+                <span class="fuente-chip fuente-{{ bloque.fuente }}">{{ bloque.fuente | title }}</span>
+                <span class="text-muted" style="font-size:0.78rem">{{ bloque.productos | length }} productos</span>
+              </div>
+              <div class="table-responsive">
+              <table class="table table-sm mb-0">
+                <tbody>
+                  {% for item in bloque.productos %}
+                  <tr>
+                    <td>
+                      <a href="/producto/{{ item.id }}" class="text-decoration-none text-dark" style="font-size:0.82rem">
+                        {{ item.nombre }}
+                      </a>
+                      {% if item.ahorro > 0 %}
+                      <div class="ahorro-badge">ahorrás ${{ "{:,.0f}".format(item.ahorro) }}</div>
+                      {% endif %}
+                    </td>
+                    <td class="text-end" style="white-space:nowrap">
+                      <div class="fw-semibold text-success" style="font-size:0.85rem">${{ "{:,.0f}".format(item.precio) }}</div>
+                      {% if item.precio_max > item.precio %}
+                      <div class="precio-otras">${{ "{:,.0f}".format(item.precio_max) }}</div>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+                <tfoot>
+                  <tr class="cart-total-row">
+                    <td>Total</td>
+                    <td class="text-end text-success">${{ "{:,.0f}".format(bloque.total) }}</td>
+                  </tr>
+                  {% if bloque.ahorro_total > 0 %}
+                  <tr>
+                    <td colspan="2" class="text-center" style="font-size:0.75rem; color:#198754; padding:0.25rem">
+                      Ahorro vs precio más caro: ${{ "{:,.0f}".format(bloque.ahorro_total) }}
+                    </td>
+                  </tr>
+                  {% endif %}
+                </tfoot>
+              </table>
+              </div>
+            </div>
+          </div>
           {% endfor %}
-        </tbody>
-      </table>
+        </div>
+      </div>
+      <div class="card-body pt-2">
+        <p class="text-muted mb-0" style="font-size:0.78rem">
+          Cada producto asignado a la fuente con el precio más bajo del último relevamiento.
+          El precio tachado es el más caro encontrado en otra fuente.
+        </p>
       </div>
       {% else %}
       <div class="card-body">
-        <p class="text-muted mb-0">Sin productos en múltiples fuentes para comparar.</p>
+        <p class="text-muted mb-0">Sin productos en múltiples fuentes para armar el carrito.</p>
       </div>
       {% endif %}
     </div>

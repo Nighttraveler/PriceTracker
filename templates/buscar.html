@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Buscar — Price Tracker{% endblock %}
+
+{% block extra_head %}
+<style>
+  .fuente-chip { padding: 0.15rem 0.55rem; border-radius: 10px; font-size: 0.72rem; font-weight: 700; color: #fff; display: inline-block; }
+  .fuente-dia       { background: #e67e22; }
+  .fuente-anonima   { background: #dc3545; }
+  .fuente-encombo   { background: #0d6efd; }
+  .fuente-carrefour { background: #004A96; }
+
+  .filter-chip input { display: none; }
+  .filter-chip label {
+    cursor: pointer;
+    padding: 0.3rem 0.75rem;
+    border-radius: 20px;
+    border: 1.5px solid #dee2e6;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: #495057;
+    background: #fff;
+    transition: all .15s;
+    user-select: none;
+    display: inline-block;
+  }
+  .filter-chip input:checked + label {
+    border-color: #0d6efd;
+    background: #e8f0fe;
+    color: #0d6efd;
+    font-weight: 600;
+  }
+  .filter-chip.fuente-dia      input:checked + label { border-color:#e67e22; background:#fff3e0; color:#e67e22; }
+  .filter-chip.fuente-anonima  input:checked + label { border-color:#dc3545; background:#fde8ea; color:#dc3545; }
+  .filter-chip.fuente-encombo  input:checked + label { border-color:#0d6efd; background:#e8f0fe; color:#0d6efd; }
+  .filter-chip.fuente-carrefour input:checked + label { border-color:#004A96; background:#e6edf5; color:#004A96; }
+
+  .cat-chips { max-height: 130px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 0.35rem; padding: 0.5rem 0; }
+  .cheapest-cell { background: #d1e7dd; font-weight: 600; }
+  .multi-badge { font-size: 0.65rem; background: #0d6efd; color: #fff; border-radius: 4px; padding: 0 4px; vertical-align: middle; }
+  .result-row:hover { background: #f8f9fa; }
+  .empty-state { text-align: center; padding: 3rem 1rem; color: #adb5bd; }
+  .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h4 class="mb-0">Buscar productos</h4>
+  {% if buscado %}
+  <span class="text-muted" style="font-size:0.85rem">{{ resultados | length }} resultado{{ 's' if resultados | length != 1 else '' }}</span>
+  {% endif %}
+</div>
+
+<form method="get" action="/buscar" id="search-form">
+
+  {# ── Barra de búsqueda ── #}
+  <div class="input-group mb-3 shadow-sm" style="max-width:600px">
+    <input type="text" name="q" class="form-control form-control-lg"
+           placeholder="Buscar producto…" value="{{ q }}" autofocus autocomplete="off"
+           style="font-size:1rem">
+    <button type="submit" class="btn btn-primary px-4">Buscar</button>
+    {% if buscado %}
+    <a href="/buscar" class="btn btn-outline-secondary" title="Limpiar">✕</a>
+    {% endif %}
+  </div>
+
+  {# ── Filtros ── #}
+  <div class="card mb-4 border-0 shadow-sm">
+    <div class="card-body py-3">
+      <div class="row g-3">
+
+        {# Fuentes #}
+        <div class="col-12 col-md-auto">
+          <div class="text-uppercase fw-semibold mb-2" style="font-size:0.7rem; color:#6c757d; letter-spacing:.05em">Fuente</div>
+          <div class="d-flex flex-wrap gap-2">
+            {% for f in all_fuentes %}
+            <span class="filter-chip fuente-{{ f }}">
+              <input type="checkbox" name="fuente" value="{{ f }}" id="f-{{ f }}"
+                     {% if f in fuentes_sel %}checked{% endif %}
+                     onchange="document.getElementById('search-form').submit()">
+              <label for="f-{{ f }}">{{ f | title }}</label>
+            </span>
+            {% endfor %}
+          </div>
+        </div>
+
+        {# Separador vertical en desktop #}
+        <div class="col-auto d-none d-md-flex align-items-stretch">
+          <div style="border-left:1px solid #dee2e6"></div>
+        </div>
+
+        {# Categorías #}
+        <div class="col">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <div class="text-uppercase fw-semibold" style="font-size:0.7rem; color:#6c757d; letter-spacing:.05em">Categoría</div>
+            {% if cats_sel %}
+            <span class="badge bg-primary rounded-pill" style="font-size:0.65rem">{{ cats_sel | length }} seleccionada{{ 's' if cats_sel | length != 1 else '' }}</span>
+            {% endif %}
+          </div>
+          <div class="cat-chips">
+            {% for cat in all_cats %}
+            <span class="filter-chip">
+              <input type="checkbox" name="cat" value="{{ cat }}" id="c-{{ loop.index }}"
+                     {% if cat in cats_sel %}checked{% endif %}
+                     onchange="document.getElementById('search-form').submit()">
+              <label for="c-{{ loop.index }}">{{ cat | title }}</label>
+            </span>
+            {% endfor %}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</form>
+
+{# ── Resultados ── #}
+{% if not buscado %}
+<div class="empty-state">
+  <div class="icon">🔍</div>
+  <div style="font-size:1.1rem; font-weight:500; color:#6c757d">Buscá por nombre, fuente o categoría</div>
+  <div class="text-muted mt-1" style="font-size:0.85rem">Los filtros se combinan — podés elegir varias fuentes y categorías a la vez</div>
+</div>
+
+{% elif not resultados %}
+<div class="empty-state">
+  <div class="icon">😶</div>
+  <div style="font-size:1.1rem; font-weight:500; color:#6c757d">Sin resultados</div>
+  <div class="text-muted mt-1" style="font-size:0.85rem">Probá con otros términos o menos filtros</div>
+</div>
+
+{% else %}
+<div class="card border-0 shadow-sm">
+  <div class="table-responsive">
+  <table class="table table-sm table-hover mb-0">
+    <thead class="table-light">
+      <tr>
+        <th style="width:1%">Cat.</th>
+        <th>Producto</th>
+        {% for f in fuentes_cols %}
+        <th class="text-end">
+          <span class="fuente-chip fuente-{{ f }}">{{ f | title }}</span>
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for prod in resultados %}
+      <tr class="result-row">
+        <td class="text-muted" style="font-size:0.75rem; white-space:nowrap">{{ prod.categoria }}</td>
+        <td>
+          <a href="/producto/{{ prod.id }}" class="text-decoration-none text-dark fw-medium" style="font-size:0.875rem">
+            {{ prod.nombre }}
+          </a>
+          {% if prod.fuentes | length > 1 %}
+          <span class="multi-badge ms-1">{{ prod.fuentes | length }} fuentes</span>
+          {% endif %}
+        </td>
+        {% for f in fuentes_cols %}
+          {% if f in prod.fuentes %}
+            {% set d = prod.fuentes[f] %}
+            {% set es_min = (prod.fuente_mas_barata == f) %}
+            <td class="text-end {{ 'cheapest-cell' if es_min else '' }}" style="white-space:nowrap">
+              {% if d.url %}
+              <a href="{{ d.url }}" target="_blank" class="text-decoration-none {{ 'text-success' if es_min else 'text-dark' }}" style="font-size:0.875rem">
+                ${{ "{:,.0f}".format(d.precio) }}
+              </a>
+              {% else %}
+              <span class="{{ 'text-success fw-semibold' if es_min else '' }}" style="font-size:0.875rem">
+                ${{ "{:,.0f}".format(d.precio) }}
+              </span>
+              {% endif %}
+              {% if es_min and prod.fuentes | length > 1 %} <span title="más barato">★</span>{% endif %}
+            </td>
+          {% else %}
+          <td class="text-center text-muted">—</td>
+          {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if resultados | length == 300 %}
+  <div class="card-footer text-muted text-center" style="font-size:0.8rem">
+    Mostrando los primeros 300 resultados — refiná la búsqueda para ver más.
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

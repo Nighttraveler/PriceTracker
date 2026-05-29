@@ -12,7 +12,6 @@ UMBRAL_SIMILITUD = 98
 # Orden importa: categorías más específicas primero para evitar falsos positivos.
 CATEGORIAS = {
     # ── Combos / packs ─────────────────────────────────────────────────────────
-    # Solo "combo" como palabra exacta — evita falsos positivos con "doypack", "packshot", etc.
     "combos": [
         "combo",
     ],
@@ -31,9 +30,9 @@ CATEGORIAS = {
         "queso por salut", "fiambre", "bondiola", "copa",
     ],
 
-    # ── Galletitas (antes de confitería para priorizar) ─────────────────────────
+    # ── Galletitas ──────────────────────────────────────────────────────────────
     "galletitas": [
-        "galletita", "cracker", "wafer", "barquillo",
+        "galletita", "galleta", "cracker", "wafer", "barquillo",
     ],
 
     # ── Snacks salados ──────────────────────────────────────────────────────────
@@ -41,7 +40,7 @@ CATEGORIAS = {
         "papas fritas", "palomitas", "nachos", "chizito",
         "palito salado", "palitos salados", "poperine",
         "mani salado", "mani con", "mani tostado",
-        "tostada de arroz",
+        "tostada de arroz", "tostadita",
     ],
 
     # ── Confitería / dulces ─────────────────────────────────────────────────────
@@ -51,15 +50,37 @@ CATEGORIAS = {
         "chupetine", "paleta dulce", "marshmallow", "oblea",
     ],
 
+    # ── Higiene personal — antes de condimentos para que "romero", "jengibre",
+    # "aceite de argan" en nombres de shampoos/acondicionadores no caigan allá ──
+    "higiene": [
+        "shampoo", "acondicionador", "desodorante",
+        "pasta dental", "papel higienico",
+        "crema corporal", "cepillo dental", "agua micelar",
+        "antitranspirante", "coloracion", "tinte para cabello",
+        "maquina de afeitar", "maquina afeitar", "afeitadora",
+        "espuma de afeitar", "crema de afeitar",
+        "esmalte de", "esmalte para",
+        "mascara de", "rimel", "base maquillaje",
+        "protector solar", "bloqueador solar", "fps",
+        "panal", "panale", "toalla femenina", "toallas femeninas",
+        "protector diario", "tampon",
+        "enjuague bucal", "hilo dental",
+        "gel de ducha", "jabon liquido",
+        "locion", "serum", "mascarilla",
+        "toallita",
+    ],
+
     # ── Condimentos y salsas ────────────────────────────────────────────────────
     "condimentos": [
         "mayonesa", "ketchup", "mostaza", "aderezo", "aceto",
         "salsa golf", "salsa de soja", "salsa bbq", "salsa worcestershire",
         "salsa teriyaki", "salsa de tomate", "salsa lista",
+        "filetto",
         "oregano", "aji molido", "pimienta", "comino", "curcuma",
         "pimenton", "paprika", "canela", "jengibre", "nuez moscada",
         "albahaca", "laurel", "romero", "tomillo", "coriandro",
         "condimento", "especia", "curry", "ajo en polvo",
+        "saborizador", "mix de sabores",
         "mermelada", "dulce de batata", "miel",
         "vinagreta", "alioli", "caesar",
     ],
@@ -81,28 +102,39 @@ CATEGORIAS = {
         "tapas para", "tapas de empanada",
         "aceite de oliva", "aceite de girasol",
         "gelatina", "gelatina en polvo",
+        "pan rallado",
+        "sopa",
     ],
 
-    # ── Congelados (antes de carnes: nuggets de pollo → congelados, no carnes) ──
+    # ── Congelados — medallones son siempre congelados (carne, veganos, quinoa) ─
     "congelados": [
         "helado", "empanada", "pizza", "hamburguesa",
         "nugget", "bocadito", "precocido", "rebozado",
         "bastones de", "acelga congelada", "espinaca congelada",
+        "medallon",
+    ],
+
+    # ── Mascotas — antes de carnes para que "alimento para perro sabor carne"
+    # no quede en carnes ──────────────────────────────────────────────────────
+    "mascotas": [
+        "para perro", "para gato",
+        "antipulgas", "antiparasitario",
+        "arena para",
+    ],
+
+    # ── Panificados — antes de carnes para que "baguetin sabor jamón" sea pan ──
+    "panificados": [
+        "pan", "tostada", "bizcocho", "factura", "medialuna",
+        "budin", "magdalena", "baguet", "lactal", "brioche",
+        "tortita", "chipas", "chipa",
     ],
 
     # ── Carnes ──────────────────────────────────────────────────────────────────
     "carnes": [
         "pollo", "carne", "bife", "milanesa", "cerdo",
         "pescado", "salchicha", "jamon", "asado", "costilla",
-        "lomo", "vacuno", "pechuga", "molida", "filet",
-        "medallon", "boca de dama",
-    ],
-
-    # ── Panificados ─────────────────────────────────────────────────────────────
-    "panificados": [
-        "pan", "tostada", "bizcocho", "factura", "medialuna",
-        "budin", "magdalena", "baguette", "lactal", "brioche",
-        "tortita", "chipas", "chipa",
+        "lomo", "vacuno", "pechuga", "molida", "filete",
+        "boca de dama",
     ],
 
     # ── Bebidas ─────────────────────────────────────────────────────────────────
@@ -129,25 +161,6 @@ CATEGORIAS = {
         "limpiador", "desinfectante",
     ],
 
-    # ── Higiene personal ─────────────────────────────────────────────────────────
-    "higiene": [
-        "shampoo", "acondicionador", "desodorante",
-        "pasta dental", "papel higienico",
-        "crema corporal", "cepillo dental", "agua micelar",
-        "antitranspirante", "coloracion", "tinte para cabello",
-        "maquina de afeitar", "maquina afeitar", "afeitadora",
-        "espuma de afeitar", "crema de afeitar",
-        "esmalte de", "esmalte para",
-        "mascara de", "rimel", "base maquillaje",
-        "protector solar", "bloqueador solar", "fps",
-        "panal", "panale", "toalla femenina", "toallas femeninas",
-        "protector diario", "tampon",
-        "enjuague bucal", "hilo dental",
-        "gel de ducha", "jabon liquido",
-        "locion", "serum", "mascarilla",
-        "toallita",
-    ],
-
     # ── Verdulería / frutería ─────────────────────────────────────────────────
     "verduleria": [
         "papa ", "tomate", "cebolla", "zanahoria", "lechuga",
@@ -159,6 +172,9 @@ CATEGORIAS = {
 }
 
 
+STOPWORDS_MATCH = frozenset({"con", "y", "x"})
+
+
 def limpiar(nombre: str) -> str:
     nombre = nombre.lower()
     nombre = unicodedata.normalize('NFKD', nombre)
@@ -166,6 +182,22 @@ def limpiar(nombre: str) -> str:
     nombre = re.sub(r'[^a-z0-9\s]', ' ', nombre)
     nombre = re.sub(r'\s+', ' ', nombre).strip()
     return nombre
+
+
+def _normalizar_para_match(nombre_limpio: str) -> str:
+    """Normalización adicional usada SOLO para comparación fuzzy, no para almacenamiento.
+
+    Resuelve diferencias de notación entre fuentes sin alterar el nombre guardado:
+    - cc → ml  (1 cc = 1 ml, distintas fuentes usan ambas)
+    - grs → g
+    - "400 ml" → "400ml"  (unifica en un solo token)
+    - quita conectores ("con", "y", "x") que son ruido puro
+    """
+    nombre = re.sub(r'\bcc\b', 'ml', nombre_limpio)
+    nombre = re.sub(r'\bgrs\b', 'g', nombre)
+    nombre = re.sub(r'(\d+)\s+(ml|g|kg|lt|l)\b', r'\1\2', nombre)
+    palabras = [p for p in nombre.split() if p not in STOPWORDS_MATCH]
+    return ' '.join(palabras)
 
 
 def es_combo(nombre_limpio: str) -> bool:
@@ -233,13 +265,15 @@ class Normalizer:
         mejor_score = 0
         mejor_id = None
         numeros_actuales = extraer_numeros(nombre_limpio)
+        nombre_match = _normalizar_para_match(nombre_limpio)
 
         for prod in productos:
             numeros_prod = extraer_numeros(prod["nombre_normalizado"])
             if numeros_actuales and numeros_prod and set(numeros_actuales) != set(numeros_prod):
                 score = 0
             else:
-                score = fuzz.token_sort_ratio(nombre_limpio, prod["nombre_normalizado"])
+                prod_match = _normalizar_para_match(prod["nombre_normalizado"])
+                score = fuzz.token_sort_ratio(nombre_match, prod_match)
 
             if score > mejor_score:
                 mejor_score = score
