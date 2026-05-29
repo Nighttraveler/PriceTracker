@@ -123,7 +123,7 @@ def producto(producto_id):
 
     fechas = sorted(fechas_set)
     datasets = []
-    colores = {"dia": "#fbc531", "anonima": "#e84118", "encombo": "#00a8ff"}
+    colores = {"dia": "#fbc531", "anonima": "#e84118", "encombo": "#00a8ff", "carrefour": "#004A96"}
     for fuente, datos in sorted(por_fuente.items()):
         precio_por_fecha = {d["fecha"]: d["precio"] for d in datos}
         dataset = {
@@ -133,12 +133,15 @@ def producto(producto_id):
         }
         datasets.append(dataset)
 
+    variantes = db.get_variantes_producto(producto_id)
+
     return render_template(
         "producto.html",
         prod=prod,
         fechas=fechas,
         datasets=datasets,
         dias=dias,
+        variantes=variantes,
     )
 
 

@@ -137,6 +137,16 @@ class Database:
         }
         return stats
 
+    def get_variantes_producto(self, producto_id: int):
+        """Devuelve una fila por fuente con la URL y nombre original de la variante."""
+        return self.conn.execute("""
+            SELECT f.nombre as fuente, v.url_producto, v.nombre_original
+            FROM variantes v
+            JOIN fuentes f ON v.fuente_id = f.id
+            WHERE v.producto_id = ?
+            ORDER BY f.nombre
+        """, (producto_id,)).fetchall()
+
     def get_historial_producto(self, producto_id: int, dias: int = 90):
         return self.conn.execute("""
             SELECT f.nombre as fuente, pr.precio, date(pr.fecha) as fecha

@@ -18,9 +18,19 @@
     <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
       <div>
         <h4 class="mb-1">{{ prod['nombre_normalizado'] | title }}</h4>
-        {% if prod['categoria'] %}
-        <span class="badge bg-secondary">{{ prod['categoria'] }}</span>
-        {% endif %}
+        <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
+          {% if prod['categoria'] %}
+          <span class="badge bg-secondary">{{ prod['categoria'] }}</span>
+          {% endif %}
+          {% for v in variantes %}
+            {% if v['url_producto'] %}
+            <a href="{{ v['url_producto'] }}" target="_blank" rel="noopener"
+               class="badge text-decoration-none fuente-chip fuente-{{ v['fuente'] }}">
+              {{ v['fuente'] | title }} ↗
+            </a>
+            {% endif %}
+          {% endfor %}
+        </div>
       </div>
       <div class="btn-group btn-group-sm">
         {% for d in [7, 14, 30, 90] %}
@@ -82,17 +92,20 @@
     <div class="table-responsive">
     <table class="table table-sm mb-0">
       <thead class="table-light">
-        <tr><th>Fuente</th><th>Primer precio</th><th>Último precio</th><th>Variación</th></tr>
+        <tr><th>Fuente</th><th>Primer precio</th><th>Último precio</th><th>Variación</th><th></th></tr>
       </thead>
       <tbody>
+      {% set url_por_fuente = {} %}
+      {% for v in variantes %}{% if v['url_producto'] %}{% set _ = url_por_fuente.update({v['fuente']: v['url_producto']}) %}{% endif %}{% endfor %}
       {% for ds in datasets %}
       {% set datos_validos = ds.data | reject('none') | list %}
       {% if datos_validos %}
       {% set primero = datos_validos[0] %}
       {% set ultimo = datos_validos[-1] %}
       {% set variacion = ((ultimo - primero) / primero * 100) | round(1) if primero > 0 else 0 %}
+      {% set fuente_key = ds.label | lower %}
       <tr>
-        <td><span class="fuente-chip fuente-{{ ds.label | lower }}">{{ ds.label }}</span></td>
+        <td><span class="fuente-chip fuente-{{ fuente_key }}">{{ ds.label }}</span></td>
         <td>$ {{ "%.2f"|format(primero) }}</td>
         <td>$ {{ "%.2f"|format(ultimo) }}</td>
         <td>
@@ -102,6 +115,12 @@
             <span class="badge-down">▼ {{ variacion | abs }}%</span>
           {% else %}
             <span class="text-muted">sin cambio</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if url_por_fuente[fuente_key] is defined %}
+          <a href="{{ url_por_fuente[fuente_key] }}" target="_blank" rel="noopener"
+             class="btn btn-outline-secondary btn-sm">Ver en {{ ds.label }} ↗</a>
           {% endif %}
         </td>
       </tr>
