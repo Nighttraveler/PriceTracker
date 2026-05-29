@@ -98,7 +98,36 @@ Los índices se crean en `db.init_schema()` (idempotentes con `IF NOT EXISTS`). 
 - Palabra ≥5 chars: prefix match (cubre plurales: "galletita" matchea "galletitas")
 - Palabra <5 chars: match exacto (evita "te" → "detergente")
 
-El orden en `CATEGORIAS` importa: las más específicas van primero.
+El orden en `CATEGORIAS` importa: las más específicas van primero. `higiene` va antes de `condimentos` (evita que "romero"/"jengibre" en nombres de shampoos gane). `mascotas` va antes de `carnes` (evita que "alimento para perro sabor carne" quede en carnes). `panificados` va antes de `carnes` (evita que "baguetin con jamón" quede en carnes).
+
+## Fuzzy matching — `_normalizar_para_match()`
+
+El matching usa `fuzz.token_sort_ratio` con umbral 98. Antes de comparar, ambos nombres pasan por `_normalizar_para_match()` (no afecta los nombres guardados en DB):
+- `cc` → `ml` (1 cc = 1 ml; distintas fuentes usan ambas notaciones)
+- `grs` → `g`
+- `"400 ml"` → `"400ml"` (une número+unidad en un solo token para que no difieran)
+- Quita conectores puros: `{"con", "y", "x"}` (ruido en descripciones de productos)
+
+Sin esto, "Acondicionador Dove Vitamina A+E 400ml" y "Acondicionador con Vitamina A y E Dove x 400 cc" obtenían score 88 (< umbral 98) y se guardaban como productos distintos.
+
+## Scripts de mantenimiento
+
+Todos deben correrse desde la raíz del proyecto con el virtualenv activo.
+
+```bash
+# Después de cambiar reglas de categorías en normalizer.py:
+python scripts/renormalizar_categorias.py
+
+# Después de cambiar lógica de fuzzy matching (UMBRAL, _normalizar_para_match):
+# Re-corre el matching para todas las variantes; fusiona duplicados y limpia huérfanos.
+python scripts/renormalizar_db.py
+
+# Migraciones one-time (ya aplicadas):
+python scripts/migrar_fechas.py          # TEXT → TIMESTAMP en columna fecha
+python scripts/corregir_timestamps.py    # corrige timestamps inconsistentes
+```
+
+`renormalizar_db.py` puede tardar varios minutos (26k variantes × fuzzy match contra ~25k productos). El caché del Normalizer ayuda para nombres repetidos.
 
 ## Pitfalls conocidos
 
