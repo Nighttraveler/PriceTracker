@@ -4,6 +4,8 @@ __pycache__/
 *.pyo
 *.log
 data/precios.db
+data/precios.db-wal
+data/precios.db-shm
 data/reportes/
 logs/
 .env
