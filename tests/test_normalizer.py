@@ -1,5 +1,6 @@
 import pytest
-from normalizer import limpiar, es_combo, detectar_categoria, normalizar_unidad
+from unittest.mock import MagicMock
+from normalizer import limpiar, es_combo, detectar_categoria, normalizar_unidad, Normalizer
 
 
 # ── limpiar ──────────────────────────────────────────────────────────────────
@@ -191,3 +192,58 @@ class TestNormalizarUnidad:
 
     def test_coma_como_decimal(self):
         assert normalizar_unidad("aceite x 1,5l") == "1500ml"
+
+
+# ── Normalizer (clase con DB) ─────────────────────────────────────────────────
+
+class TestNormalizerClass:
+    def setup_method(self):
+        self.mock_db = MagicMock()
+        self.mock_db.get_all_productos.return_value = []
+        self.normalizer = Normalizer(self.mock_db)
+
+    def test_evitar_merge_animal_aime(self):
+        # Productos similares pero de distinta marca no deben fusionarse
+        self.mock_db.get_all_productos.return_value = [
+            {"id": 1, "nombre_normalizado": "vino tinto cabernet sauvignon animal x 750 cc"}
+        ]
+        self.mock_db.insert_producto.return_value = 2
+
+        producto_id = self.normalizer.obtener_o_crear_producto(
+            "vino tinto cabernet sauvignon aime x 750 cc", fuente_id=1
+        )
+        assert producto_id == 2, "Animal y Aime son distintos — no deben fusionarse"
+
+    def test_producto_existente_retorna_mismo_id(self):
+        self.mock_db.get_all_productos.return_value = [
+            {"id": 5, "nombre_normalizado": "leche entera la serenisima x 1 lt"}
+        ]
+        producto_id = self.normalizer.obtener_o_crear_producto(
+            "Leche Entera La Serenisima x 1 Lt", fuente_id=1
+        )
+        assert producto_id == 5
+
+    def test_producto_nuevo_llama_insert(self):
+        self.mock_db.insert_producto.return_value = 99
+        producto_id = self.normalizer.obtener_o_crear_producto(
+            "Producto completamente nuevo xyz", fuente_id=1
+        )
+        assert producto_id == 99
+        self.mock_db.insert_producto.assert_called_once()
+
+    def test_combo_detectado_en_insert(self):
+        self.mock_db.insert_producto.return_value = 10
+        self.normalizer.obtener_o_crear_producto("combo dove shampoo x 2", fuente_id=1)
+
+        _, kwargs = self.mock_db.insert_producto.call_args
+        assert kwargs.get("es_combo") is True or self.mock_db.insert_producto.call_args[0][3] == 1
+
+    def test_cache_evita_queries_repetidas(self):
+        self.mock_db.get_all_productos.return_value = []
+        self.mock_db.insert_producto.return_value = 7
+
+        self.normalizer.obtener_o_crear_producto("arroz largo fino x 500g", fuente_id=1)
+        self.normalizer.obtener_o_crear_producto("arroz largo fino x 500g", fuente_id=1)
+
+        # get_all_productos solo se llama la primera vez
+        assert self.mock_db.get_all_productos.call_count == 1
