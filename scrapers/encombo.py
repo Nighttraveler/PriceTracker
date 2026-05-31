@@ -49,10 +49,17 @@ class EncomboScraper(BaseScraper):
                                 continue
 
                             nombre = nombre_el.get_text(strip=True)
+                            precio_raw = precio_el.get_text(strip=True)
+                            if not precio_raw:
+                                continue
+                            
+                            precio = self.limpiar_precio(precio_raw)
+                            if precio <= 0:
+                                continue
 
                             productos.append({
                                 "nombre": nombre,
-                                "precio": self.limpiar_precio(precio_el.get_text(strip=True)),
+                                "precio": precio,
                                 "url":    link_el["href"] if link_el else "",
                             })
                         except Exception as e:

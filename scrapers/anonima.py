@@ -38,12 +38,15 @@ class AnonimaScraper(BaseScraper):
 
                         nombre = a_el.get('data-nombre')
                         precio_str = a_el.get('data-precio') or a_el.get('data-precio_oferta')
+                        stock = a_el.get('data-stock')
 
-                        if not nombre or not precio_str:
+                        if not nombre or not precio_str or stock == '0':
                             continue
 
                         # data-precio contains a raw number like '1190' or similar
                         precio = float(precio_str)
+                        if precio <= 0:
+                            continue
 
                         productos.append({
                             "nombre": nombre,
