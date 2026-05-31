@@ -122,12 +122,19 @@ class DiaScraper:
                         try:
                             nombre = item.get("productName", "").strip()
                             vtex_items = item.get("items", [])
-                            sellers = vtex_items[0].get("sellers", []) if vtex_items else []
-                            offer = sellers[0].get("commertialOffer", {}) if sellers else {}
+                            if not vtex_items:
+                                continue
+                            
+                            sellers = vtex_items[0].get("sellers", [])
+                            if not sellers:
+                                continue
+                                
+                            offer = sellers[0].get("commertialOffer", {})
                             precio = offer.get("Price", 0)
+                            available = offer.get("AvailableQuantity", 0) > 0
                             link = item.get("link", "")
 
-                            if not nombre or not precio:
+                            if not nombre or not precio or not available:
                                 continue
 
                             productos.append({

@@ -87,15 +87,27 @@ class CarrefourScraper:
 
                     for item in items:
                         try:
-                            nombre = item.get("productName", "").strip()
-                            sellers = item.get("items", [{}])[0].get("sellers", [{}])
-                            offer = sellers[0].get("commertialOffer", {}) if sellers else {}
+                            # Check for availability and price
+                            # VTEX provides 'Price' which is 0 if not available
+                            vtex_items = item.get("items", [])
+                            if not vtex_items:
+                                continue
+                            
+                            # Check availability: check 'AvailableQuantity'
+                            # or if all sellers have price 0.
+                            sellers = vtex_items[0].get("sellers", [])
+                            if not sellers:
+                                continue
+                            
+                            offer = sellers[0].get("commertialOffer", {})
                             precio = offer.get("Price", 0)
-                            link = item.get("link", "")
-
-                            if not nombre or not precio:
+                            available = offer.get("AvailableQuantity", 0) > 0
+                            
+                            if not nombre or not precio or not available:
                                 continue
 
+                            link = item.get("link", "")
+                            
                             productos.append({
                                 "nombre": nombre,
                                 "precio": float(precio),
