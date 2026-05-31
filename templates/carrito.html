@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+{% block title %}Mi Carrito — Price Tracker{% endblock %}
+
+{% block extra_head %}
+<style>
+  .cart-item { display: flex; align-items: center; justify-content: space-between; padding: 0.45rem 0.75rem; border-bottom: 1px solid #f0f0f0; }
+  .cart-item:last-child { border-bottom: none; }
+  .cart-item-texto { font-size: 0.9rem; font-weight: 500; }
+  .remove-btn { background: none; border: none; color: #adb5bd; font-size: 1rem; cursor: pointer; line-height: 1; padding: 0 4px; }
+  .remove-btn:hover { color: #dc3545; }
+
+  .ahorro-badge { font-size: 0.7rem; color: #198754; font-weight: 600; }
+  .precio-otras { font-size: 0.7rem; color: #adb5bd; text-decoration: line-through; }
+  .cart-total-row td { font-weight: 700; background: #f8f9fa; }
+  .cart-card-header { display: flex; align-items: center; gap: 0.5rem; }
+
+  .fuente-chip { padding: 0.15rem 0.55rem; border-radius: 10px; font-size: 0.72rem; font-weight: 700; color: #fff; display: inline-block; }
+  .fuente-dia       { background: #e67e22; }
+  .fuente-anonima   { background: #dc3545; }
+  .fuente-encombo   { background: #0d6efd; }
+  .fuente-carrefour { background: #004A96; }
+  .cheapest-cell { background: #d1e7dd !important; font-weight: 600; }
+  .cheapest-cell a { color: #0f5132; }
+
+  #modal-results table { font-size: 0.875rem; }
+  .modal-dialog { max-width: 780px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h4 class="mb-0">Mi carrito</h4>
+  <button id="btn-limpiar" class="btn btn-outline-danger btn-sm" style="display:none">Limpiar todo</button>
+</div>
+
+{# ── Input ── #}
+<div class="card mb-3">
+  <div class="card-body py-3">
+    <div class="input-group">
+      <input id="item-input" type="text" class="form-control"
+             placeholder="Escribí un producto (ej: leche, pan lactal, galletitas…)"
+             autocomplete="off" autocorrect="off" spellcheck="false">
+      <button id="btn-agregar" class="btn btn-primary px-4">Buscar</button>
+    </div>
+    <div class="text-muted mt-2" style="font-size:0.78rem">Presioná Enter o hacé click en Buscar — seleccioná el producto exacto en el panel de resultados.</div>
+  </div>
+</div>
+
+{# ── Lista de items ── #}
+<div class="card mb-4">
+  <div id="cart-empty" class="card-body text-center text-muted py-4" style="display:none">
+    <div style="font-size:2rem; margin-bottom:0.5rem">🛒</div>
+    <div style="font-size:0.95rem">El carrito está vacío — buscá productos arriba</div>
+  </div>
+  <div id="cart-list" style="display:none"></div>
+</div>
+
+{# ── Resultados ── #}
+<div id="prices-loading" class="text-center text-muted py-3" style="display:none">
+  <div class="spinner-border spinner-border-sm me-2" role="status"></div> Buscando precios…
+</div>
+<div id="prices-error" class="alert alert-warning" style="display:none"></div>
+
+{# No encontrados #}
+<div id="section-no-encontrados" class="alert alert-warning d-flex gap-2 align-items-start" style="display:none">
+  <span style="font-size:1.1rem">⚠</span>
+  <div>
+    <strong>Productos no encontrados:</strong>
+    <span id="no-encontrados-lista"></span>
+    <div class="mt-1" style="font-size:0.8rem">Algunos IDs guardados no se encontraron en la base de datos.</div>
+  </div>
+</div>
+
+{# Carrito óptimo #}
+<div id="section-optimo" style="display:none">
+  <h5 class="mb-3">Carrito óptimo <small class="text-muted fw-normal" style="font-size:0.8rem">— dónde comprar cada cosa más barato</small></h5>
+  <div id="optimo-bloques" class="row g-3 mb-4"></div>
+</div>
+
+{# ── Modal de selección ── #}
+<div class="modal fade" id="busquedaModal" tabindex="-1" aria-labelledby="busquedaModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="busquedaModalLabel">Seleccioná un producto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div id="modal-loading" class="text-center py-4" style="display:none">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div> Buscando…
+        </div>
+        <div id="modal-empty" class="text-center text-muted py-4" style="display:none">
+          Sin resultados para esta búsqueda.
+        </div>
+        <div id="modal-results" style="display:none">
+          <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Producto</th>
+                  <th>Categoría</th>
+                  <th>Fuentes</th>
+                  <th class="text-end">Precio desde</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="modal-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer d-flex justify-content-between align-items-center">
+        <div id="modal-pagination" class="d-flex align-items-center gap-2"></div>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const input      = document.getElementById('item-input');
+  const btnAgregar = document.getElementById('btn-agregar');
+  const btnLimpiar = document.getElementById('btn-limpiar');
+  const cartEmpty  = document.getElementById('cart-empty');
+  const cartList   = document.getElementById('cart-list');
+
+  let productNames = {};  // id → nombre normalizado
+  let modalPage = 1;
+  let modalQuery = '';
+  let modalTotalPages = 1;
+  const busquedaModalEl = document.getElementById('busquedaModal');
+  const busquedaModal = new bootstrap.Modal(busquedaModalEl);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function fuenteChip(f) {
+    return `<span class="fuente-chip fuente-${f}">${f.charAt(0).toUpperCase() + f.slice(1)}</span>`;
+  }
+  function fmt(n) { return '$' + n.toLocaleString('es-AR', {maximumFractionDigits: 0}); }
+
+  // ── Render lista del carrito ──────────────────────────────────────────────
+  function renderCartList() {
+    const c = getCart();
+    if (c.length === 0) {
+      cartEmpty.style.display = '';
+      cartList.style.display  = 'none';
+      btnLimpiar.style.display = 'none';
+      clearResults();
+      return;
+    }
+    cartEmpty.style.display = 'none';
+    cartList.style.display  = '';
+    btnLimpiar.style.display = '';
+    cartList.innerHTML = c.map(id => `
+      <div class="cart-item">
+        <div class="cart-item-texto">${productNames[id] || `Producto #${id}`}</div>
+        <button class="remove-btn" data-id="${id}" title="Quitar">✕</button>
+      </div>
+    `).join('');
+    cartList.querySelectorAll('.remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        removeFromCart(parseInt(btn.dataset.id, 10));
+        renderCartList();
+        loadPrices();
+      });
+    });
+  }
+
+  function clearResults() {
+    document.getElementById('section-optimo').style.display = 'none';
+    document.getElementById('section-no-encontrados').style.display = 'none';
+    document.getElementById('prices-error').style.display = 'none';
+  }
+
+  // ── Modal de búsqueda ─────────────────────────────────────────────────────
+  function abrirModalBusqueda(query) {
+    modalQuery = query;
+    modalPage = 1;
+    busquedaModal.show();
+    fetchModalResults();
+  }
+
+  async function fetchModalResults() {
+    const loading   = document.getElementById('modal-loading');
+    const emptyEl   = document.getElementById('modal-empty');
+    const resultsEl = document.getElementById('modal-results');
+
+    loading.style.display   = '';
+    emptyEl.style.display   = 'none';
+    resultsEl.style.display = 'none';
+
+    try {
+      const url = `/api/buscar_carrito?q=${encodeURIComponent(modalQuery)}&page=${modalPage}&per_page=10`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      modalTotalPages = data.total_pages;
+      renderModalResults(data);
+    } catch (e) {
+      loading.style.display = 'none';
+      emptyEl.textContent   = 'Error al buscar: ' + e.message;
+      emptyEl.style.display = '';
+    }
+  }
+
+  function renderModalResults(data) {
+    const loading   = document.getElementById('modal-loading');
+    const emptyEl   = document.getElementById('modal-empty');
+    const resultsEl = document.getElementById('modal-results');
+    const tbody     = document.getElementById('modal-tbody');
+
+    loading.style.display = 'none';
+
+    if (!data.resultados || !data.resultados.length) {
+      emptyEl.textContent   = 'Sin resultados para esta búsqueda.';
+      emptyEl.style.display = '';
+      document.getElementById('modal-pagination').innerHTML = '';
+      return;
+    }
+
+    resultsEl.style.display = '';
+
+    tbody.innerHTML = data.resultados.map(prod => {
+      const fuentes  = Object.keys(prod.fuentes);
+      const precios  = Object.values(prod.fuentes).map(f => f.precio);
+      const precioMin = Math.min(...precios);
+      const enCarrito = isInCart(prod.id);
+      return `<tr>
+        <td>${prod.nombre}</td>
+        <td class="text-muted" style="font-size:0.78rem; white-space:nowrap">${prod.categoria || '—'}</td>
+        <td>${fuentes.map(f => fuenteChip(f)).join(' ')}</td>
+        <td class="text-end" style="white-space:nowrap">${fmt(precioMin)}</td>
+        <td class="text-end">
+          ${enCarrito
+            ? `<span class="badge bg-success">✓ Agregado</span>`
+            : `<button class="btn btn-sm btn-primary btn-seleccionar"
+                       data-id="${prod.id}"
+                       data-nombre="${prod.nombre.replace(/"/g, '&quot;')}">Agregar</button>`
+          }
+        </td>
+      </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('.btn-seleccionar').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id     = parseInt(btn.dataset.id, 10);
+        const nombre = btn.dataset.nombre;
+        productNames[id] = nombre;
+        addToCart(id);
+        busquedaModal.hide();
+        input.value = '';
+        renderCartList();
+        loadPrices();
+      });
+    });
+
+    renderModalPagination(data.page, data.total_pages, data.total);
+  }
+
+  function renderModalPagination(page, totalPages, total) {
+    const el = document.getElementById('modal-pagination');
+    const countLabel = `<span class="text-muted" style="font-size:0.8rem">${total} resultado${total !== 1 ? 's' : ''}</span>`;
+    if (totalPages <= 1) {
+      el.innerHTML = countLabel;
+      return;
+    }
+    el.innerHTML = `
+      ${countLabel}
+      <button class="btn btn-sm btn-outline-secondary" id="modal-prev" ${page <= 1 ? 'disabled' : ''}>← Ant.</button>
+      <span style="font-size:0.85rem">Pág. ${page} / ${totalPages}</span>
+      <button class="btn btn-sm btn-outline-secondary" id="modal-next" ${page >= totalPages ? 'disabled' : ''}>Sig. →</button>
+    `;
+    document.getElementById('modal-prev')?.addEventListener('click', () => { modalPage--; fetchModalResults(); });
+    document.getElementById('modal-next')?.addEventListener('click', () => { modalPage++; fetchModalResults(); });
+  }
+
+  // ── Agregar ítem (abre modal) ─────────────────────────────────────────────
+  function agregarItem() {
+    const t = input.value.trim();
+    if (!t) return;
+    abrirModalBusqueda(t);
+  }
+
+  btnAgregar.addEventListener('click', agregarItem);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); agregarItem(); } });
+
+  btnLimpiar.addEventListener('click', () => {
+    saveCart([]);
+    productNames = {};
+    renderCartList();
+  });
+
+  // ── Render carrito óptimo ─────────────────────────────────────────────────
+  function renderOptimo(carrito) {
+    const sec       = document.getElementById('section-optimo');
+    const container = document.getElementById('optimo-bloques');
+    if (!carrito.length) { sec.style.display = 'none'; return; }
+    sec.style.display = '';
+    container.innerHTML = carrito.map(bloque => `
+      <div class="col-12 col-md-6 col-xl-3">
+        <div class="card h-100 border-0 shadow-sm">
+          <div class="card-header cart-card-header bg-white border-bottom">
+            ${fuenteChip(bloque.fuente)}
+            <span class="text-muted" style="font-size:0.78rem">${bloque.productos.length} producto${bloque.productos.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm mb-0">
+              <tbody>
+                ${bloque.productos.map(item => `
+                  <tr>
+                    <td>
+                      <div style="font-size:0.82rem">${item.nombre}</div>
+                      ${item.ahorro > 0 ? `<div class="ahorro-badge">ahorrás ${fmt(item.ahorro)}</div>` : ''}
+                    </td>
+                    <td class="text-end" style="white-space:nowrap">
+                      <div class="fw-semibold text-success" style="font-size:0.85rem">${fmt(item.precio)}</div>
+                      ${item.precio_max > item.precio ? `<div class="precio-otras">${fmt(item.precio_max)}</div>` : ''}
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot>
+                <tr class="cart-total-row">
+                  <td>Total</td>
+                  <td class="text-end text-success">${fmt(bloque.total)}</td>
+                </tr>
+                ${bloque.ahorro_total > 0 ? `
+                <tr>
+                  <td colspan="2" class="text-center" style="font-size:0.74rem; color:#198754; padding:0.25rem">
+                    Ahorro vs precio más caro: ${fmt(bloque.ahorro_total)}
+                  </td>
+                </tr>` : ''}
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ── Fetch de precios ──────────────────────────────────────────────────────
+  async function loadPrices() {
+    const c       = getCart();
+    const loading = document.getElementById('prices-loading');
+    const errEl   = document.getElementById('prices-error');
+    const secNoEnc = document.getElementById('section-no-encuentros');
+
+    errEl.style.display = 'none';
+
+    if (!c.length) {
+      loading.style.display = 'none';
+      clearResults();
+      return;
+    }
+
+    loading.style.display = '';
+    try {
+      const res = await fetch('/api/carrito', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ids: c}),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      (data.productos || []).forEach(p => { productNames[p.id] = p.nombre; });
+      renderCartList();
+
+      const secNoEnc2 = document.getElementById('section-no-encontrados');
+      if (data.no_encontrados && data.no_encontrados.length) {
+        document.getElementById('no-encontrados-lista').textContent =
+          data.no_encontrados.map(id => `#${id}`).join(', ');
+        secNoEnc2.style.display = '';
+      } else {
+        secNoEnc2.style.display = 'none';
+      }
+
+      renderOptimo(data.carrito);
+    } catch (e) {
+      errEl.textContent = 'Error consultando precios: ' + e.message;
+      errEl.style.display = '';
+    } finally {
+      loading.style.display = 'none';
+    }
+  }
+
+  // ── Inicializar ───────────────────────────────────────────────────────────
+  renderCartList();
+  if (getCart().length) loadPrices();
+  input.focus();
+});
+</script>
+{% endblock %}

@@ -5,11 +5,58 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-from flask import Flask, render_template, request, abort
+from flask import Flask, render_template, request, abort, jsonify
 
 from db import Database
 
 app = Flask(__name__)
+
+
+def _compute_carrito_optimo(rows):
+    por_producto = {}
+    for row in rows:
+        pid = row["id"]
+        if pid not in por_producto:
+            por_producto[pid] = {
+                "id": pid,
+                "nombre": row["nombre_normalizado"],
+                "categoria": row["categoria"],
+                "fuentes": {},
+            }
+        por_producto[pid]["fuentes"][row["fuente"]] = {
+            "precio": row["precio"],
+            "url": row["url_producto"],
+        }
+
+    productos = list(por_producto.values())
+
+    por_fuente = defaultdict(list)
+    for prod in productos:
+        if not prod["fuentes"]:
+            continue
+        fuente_min = min(prod["fuentes"], key=lambda f: prod["fuentes"][f]["precio"])
+        precio_min = prod["fuentes"][fuente_min]["precio"]
+        precio_max = max(prod["fuentes"][f]["precio"] for f in prod["fuentes"])
+        por_fuente[fuente_min].append({
+            "id": prod["id"],
+            "nombre": prod["nombre"],
+            "precio": precio_min,
+            "url": prod["fuentes"][fuente_min]["url"],
+            "precio_max": precio_max,
+            "ahorro": round(precio_max - precio_min, 2),
+            "todas_fuentes": {f: prod["fuentes"][f]["precio"] for f in prod["fuentes"]},
+        })
+
+    carrito = []
+    for fuente, items in sorted(por_fuente.items()):
+        carrito.append({
+            "fuente": fuente,
+            "productos": items,
+            "total": round(sum(i["precio"] for i in items), 2),
+            "ahorro_total": round(sum(i["ahorro"] for i in items), 2),
+        })
+
+    return productos, carrito
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "data", "precios.db")
 
@@ -24,7 +71,24 @@ def index():
     stats = db.stats()
     dias = int(request.args.get("dias", 7))
     highlights = db.get_highlights(dias=dias, min_variacion=5.0)
-    return render_template("index.html", stats=stats, highlights=highlights, dias=dias)
+    highlights_subas = sorted(
+        [h for h in highlights if h["variacion_pct"] > 0],
+        key=lambda h: h["variacion_pct"],
+        reverse=True,
+    )
+    highlights_bajas = sorted(
+        [h for h in highlights if h["variacion_pct"] < 0],
+        key=lambda h: h["variacion_pct"],
+    )
+    return render_template(
+        "index.html",
+        stats=stats,
+        highlights_subas=highlights_subas,
+        highlights_bajas=highlights_bajas,
+        n_subas=len(highlights_subas),
+        n_bajas=len(highlights_bajas),
+        dias=dias,
+    )
 
 
 PER_PAGE = 50
@@ -218,6 +282,69 @@ def buscar():
         fuentes_cols=fuentes_cols,
         buscado=buscado,
     )
+
+
+@app.route("/carrito")
+def carrito_page():
+    return render_template("carrito.html")
+
+
+CARRITO_MODAL_PER_PAGE = 10
+
+
+@app.route("/api/buscar_carrito")
+def api_buscar_carrito():
+    q = request.args.get("q", "").strip()
+    page = max(1, int(request.args.get("page", 1)))
+    per_page = max(1, min(50, int(request.args.get("per_page", CARRITO_MODAL_PER_PAGE))))
+
+    db = get_db()
+    todos = db.buscar_productos(q=q, max_productos=200)
+
+    total = len(todos)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    items = todos[(page - 1) * per_page: page * per_page]
+
+    return jsonify({
+        "resultados": items,
+        "page": page,
+        "total_pages": total_pages,
+        "total": total,
+        "per_page": per_page,
+    })
+
+
+@app.route("/api/carrito", methods=["POST"])
+def api_carrito():
+    data = request.get_json() or {}
+    raw_ids = data.get("ids", [])
+    ids = []
+    for i in raw_ids:
+        try:
+            n = int(i)
+            if n > 0:
+                ids.append(n)
+        except (ValueError, TypeError):
+            pass
+    ids = list(dict.fromkeys(ids))  # deduplicate preserving order
+
+    if not ids:
+        return jsonify({"productos": [], "carrito": [], "fuentes": [], "no_encontrados": []})
+
+    db = get_db()
+    rows = db.get_precios_carrito(ids)
+    productos, carrito = _compute_carrito_optimo(rows)
+    fuentes = sorted({f for p in productos for f in p["fuentes"]})
+    found_ids = {p["id"] for p in productos}
+    no_encontrados = [i for i in ids if i not in found_ids]
+
+    return jsonify({
+        "productos": productos,
+        "carrito": carrito,
+        "fuentes": fuentes,
+        "no_encontrados": no_encontrados,
+    })
 
 
 if __name__ == "__main__":
