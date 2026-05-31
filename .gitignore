@@ -11,3 +11,4 @@ reporte.html
 logs/
 .env
 .venv/
+.hermes/
