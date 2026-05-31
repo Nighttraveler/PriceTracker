@@ -403,9 +403,35 @@ class Database:
 
         return result
 
-    def get_highlights(self, dias: int = 7, min_variacion: float = 5.0):
+    def get_precios_carrito(self, producto_ids: list):
+        if not producto_ids:
+            return []
+        placeholders = ",".join("?" * len(producto_ids))
+        return self.conn.execute(f"""
+            WITH max_por_fuente AS (
+                SELECT v.fuente_id, MAX(date(pr.fecha)) AS max_fecha
+                FROM precios pr JOIN variantes v ON pr.variante_id = v.id
+                GROUP BY v.fuente_id
+            ),
+            latest AS (
+                SELECT v.producto_id, f.nombre AS fuente, pr.precio, v.url_producto
+                FROM precios pr
+                JOIN variantes v ON pr.variante_id = v.id
+                JOIN fuentes f ON v.fuente_id = f.id
+                JOIN max_por_fuente m ON v.fuente_id = m.fuente_id
+                    AND date(pr.fecha) = m.max_fecha
+            )
+            SELECT p.id, p.nombre_normalizado, p.categoria,
+                   l.fuente, l.precio, l.url_producto
+            FROM productos p
+            JOIN latest l ON p.id = l.producto_id
+            WHERE p.id IN ({placeholders})
+            ORDER BY p.nombre_normalizado, l.fuente
+        """, producto_ids).fetchall()
+
+    def get_highlights(self, dias: int = 7, min_variacion: float = 5.0, limit: int = 50):
         """Productos con mayor variación de precio en el período."""
-        return self.conn.execute("""
+        return self.conn.execute(f"""
             WITH precios_rango AS (
                 SELECT v.producto_id, f.nombre as fuente,
                        pr.precio, date(pr.fecha) as fecha,
@@ -427,7 +453,7 @@ class Database:
             WHERE pr_p.precio > 0
               AND ABS((u.precio - pr_p.precio) * 100.0 / pr_p.precio) >= ?
             ORDER BY ABS(variacion_pct) DESC
-            LIMIT 20
+            LIMIT {int(limit)}
         """, (f"-{dias}", min_variacion)).fetchall()
 
 

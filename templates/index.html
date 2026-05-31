@@ -40,50 +40,79 @@
   </div>
 </div>
 
-<div class="card mb-4">
-  <div class="card-body">
-    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-      <h5 class="card-title mb-0">Highlights</h5>
-      <div class="btn-group btn-group-sm">
-        {% for d in [7, 14, 30] %}
-          <a href="/?dias={{ d }}" class="btn btn-outline-secondary {% if dias == d %}active{% endif %}">{{ d }} días</a>
-        {% endfor %}
-      </div>
-    </div>
-
-    {% if highlights %}
-    <div class="table-responsive">
-    <table class="table table-hover table-sm mb-0">
-      <thead>
-        <tr>
-          <th>Producto</th>
-          <th>Fuente</th>
-          <th>Precio actual</th>
-          <th>Variación</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for h in highlights %}
-        <tr>
-          <td><a href="/producto/{{ h['id'] }}" class="text-decoration-none">{{ h['nombre_normalizado'] }}</a></td>
-          <td><span class="fuente-chip fuente-{{ h['fuente'] }}">{{ h['fuente'] }}</span></td>
-          <td>$ {{ "%.2f"|format(h['precio_actual']) }}</td>
-          <td>
-            {% if h['variacion_pct'] > 0 %}
-              <span class="badge-up">▲ {{ h['variacion_pct'] }}%</span>
-            {% else %}
-              <span class="badge-down">▼ {{ h['variacion_pct']|abs }}%</span>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    </div>
-    {% else %}
-    <p class="text-muted mb-0">No hay variaciones mayores al 5% en los últimos {{ dias }} días.</p>
-    {% endif %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h5 class="mb-0">Highlights</h5>
+  <div class="btn-group btn-group-sm">
+    {% for d in [7, 14, 30] %}
+      <a href="/?dias={{ d }}" class="btn btn-outline-secondary {% if dias == d %}active{% endif %}">{{ d }} días</a>
+    {% endfor %}
   </div>
+</div>
+
+<div class="row g-3 mb-4">
+
+  {# Subas #}
+  <div class="col-12 col-md-6">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong class="text-danger">▲ Subas del período</strong>
+        <span class="badge bg-danger">{{ n_subas }}</span>
+      </div>
+      {% if highlights_subas %}
+      <div class="table-responsive">
+      <table class="table table-hover table-sm mb-0">
+        <thead>
+          <tr><th>Producto</th><th>Fuente</th><th>Precio actual</th><th>Variación</th></tr>
+        </thead>
+        <tbody>
+          {% for h in highlights_subas %}
+          <tr>
+            <td><a href="/producto/{{ h['id'] }}" class="text-decoration-none">{{ h['nombre_normalizado'] }}</a></td>
+            <td><span class="fuente-chip fuente-{{ h['fuente'] }}">{{ h['fuente'] }}</span></td>
+            <td>$ {{ "%.2f"|format(h['precio_actual']) }}</td>
+            <td><span class="badge-up">▲ {{ h['variacion_pct'] }}%</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <div class="card-body text-muted">Sin subas mayores al 5% en los últimos {{ dias }} días.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Bajas #}
+  <div class="col-12 col-md-6">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong class="text-success">▼ Bajas del período</strong>
+        <span class="badge bg-success">{{ n_bajas }}</span>
+      </div>
+      {% if highlights_bajas %}
+      <div class="table-responsive">
+      <table class="table table-hover table-sm mb-0">
+        <thead>
+          <tr><th>Producto</th><th>Fuente</th><th>Precio actual</th><th>Variación</th></tr>
+        </thead>
+        <tbody>
+          {% for h in highlights_bajas %}
+          <tr>
+            <td><a href="/producto/{{ h['id'] }}" class="text-decoration-none">{{ h['nombre_normalizado'] }}</a></td>
+            <td><span class="fuente-chip fuente-{{ h['fuente'] }}">{{ h['fuente'] }}</span></td>
+            <td>$ {{ "%.2f"|format(h['precio_actual']) }}</td>
+            <td><span class="badge-down">▼ {{ h['variacion_pct']|abs }}%</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <div class="card-body text-muted">Sin bajas mayores al 5% en los últimos {{ dias }} días.</div>
+      {% endif %}
+    </div>
+  </div>
+
 </div>
 
 <div class="card">

@@ -6,6 +6,42 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
+
+def _build_tabla_precios(db, dias):
+    filas = db.get_precios_rango(dias)
+    por_cat = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {"registros": [], "url": ""})))
+    for fila in filas:
+        cat = fila["categoria"] or "Sin Categoría"
+        por_cat[cat][fila["nombre_normalizado"]][fila["fuente"]]["registros"].append(
+            {"precio": fila["precio"], "fecha": fila["fecha"]}
+        )
+        por_cat[cat][fila["nombre_normalizado"]][fila["fuente"]]["url"] = fila["url_producto"]
+
+    rows = []
+    for cat in sorted(por_cat):
+        for producto, fuentes_data in sorted(por_cat[cat].items()):
+            row = {"producto": producto, "cat": cat, "fuentes": {}}
+            for fuente, data in fuentes_data.items():
+                regs = sorted(data["registros"], key=lambda r: r["fecha"])
+                precio_actual = regs[-1]["precio"]
+                precio_anterior = regs[0]["precio"] if len(regs) > 1 else None
+                variacion = None
+                if precio_anterior and precio_anterior > 0:
+                    variacion = round((precio_actual - precio_anterior) / precio_anterior * 100, 1)
+                row["fuentes"][fuente] = {
+                    "precio_actual": precio_actual,
+                    "variacion_pct": variacion,
+                    "url": data["url"],
+                }
+            row["num_fuentes"] = len(row["fuentes"])
+            if row["num_fuentes"] >= 2:
+                row["fuente_mas_barata"] = min(row["fuentes"], key=lambda f: row["fuentes"][f]["precio_actual"])
+                rows.append(row)
+
+    rows.sort(key=lambda r: (-r["num_fuentes"], r["cat"], r["producto"]))
+    fuentes = sorted({f for r in rows for f in r["fuentes"]})
+    return rows, fuentes
+
 from jinja2 import Environment, FileSystemLoader
 
 from db import Database
@@ -33,8 +69,17 @@ def generar_reporte(db: Database, dias: int, output: str):
         mas_barata = min(fuentes_data, key=lambda f: fuentes_data[f]["avg"])
         tabla_cat.append({"categoria": cat, "fuentes": fuentes_data, "mas_barata": mas_barata})
 
-    n_subas = sum(1 for h in highlights if h["variacion_pct"] > 0)
-    n_bajas = sum(1 for h in highlights if h["variacion_pct"] < 0)
+    tabla_precios, fuentes_comparativa = _build_tabla_precios(db, dias)
+
+    highlights_subas = sorted(
+        [h for h in highlights if h["variacion_pct"] > 0],
+        key=lambda h: h["variacion_pct"],
+        reverse=True,
+    )
+    highlights_bajas = sorted(
+        [h for h in highlights if h["variacion_pct"] < 0],
+        key=lambda h: h["variacion_pct"],
+    )
 
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
     template = env.get_template("reporte.html")
@@ -42,13 +87,16 @@ def generar_reporte(db: Database, dias: int, output: str):
         fecha=date.today().strftime("%d/%m/%Y"),
         dias=dias,
         stats=stats,
-        highlights=highlights,
+        highlights_subas=highlights_subas,
+        highlights_bajas=highlights_bajas,
         carrito=carrito,
         n_productos_multi=len(productos_multi),
         tabla_cat=tabla_cat,
         fuentes=fuentes,
-        n_subas=n_subas,
-        n_bajas=n_bajas,
+        n_subas=len(highlights_subas),
+        n_bajas=len(highlights_bajas),
+        tabla_precios=tabla_precios,
+        fuentes_comparativa=fuentes_comparativa,
     )
 
     Path(output).parent.mkdir(parents=True, exist_ok=True)
