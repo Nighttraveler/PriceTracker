@@ -8,16 +8,13 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
 
   app:
     build: .
     environment:
-      DATABASE_URL: postgresql://user:password@db:5432/price_tracker
+      DATABASE_URL: postgresql://user:***@db:5432/price_tracker
     volumes:
       - ./data:/app/data
     depends_on:
       - db
-
-volumes:
-  postgres_data:
