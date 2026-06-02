@@ -3,14 +3,17 @@
 db.py — Capa de acceso a la base de datos SQLite para Hermes Price Tracker.
 """
 
+import os
 import sqlite3
 import argparse
 from pathlib import Path
 
 
 class Database:
-    def __init__(self, path: str = "data/precios.db"):
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, path: str = ""):
+        if not path:
+            path = os.environ.get("DATABASE_PATH", "data/precios.db")
+        Path(str(path)).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
