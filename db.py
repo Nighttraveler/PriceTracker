@@ -5,6 +5,7 @@ Soporta SQLite (default) y PostgreSQL (cuando DATABASE_URL=postgresql://...).
 """
 
 import os
+import re
 import argparse
 from pathlib import Path
 
@@ -37,12 +38,18 @@ class Database:
         if not self._pg:
             return sql
         sql = sql.replace("?", "%s")
-        # date('now', ? || ' days') ya tiene ? reemplazado por %s
         sql = sql.replace(
             "date('now', %s || ' days')",
             "(CURRENT_DATE + (%s || ' days')::interval)",
         )
         sql = sql.replace("date(pr.fecha)", "DATE(pr.fecha)")
+        # ROUND(expr, n) requiere numeric en PG; double precision no está soportado
+        sql = re.sub(
+            r'ROUND\((.+?),\s*(\d+)\)',
+            lambda m: f'ROUND(({m.group(1)})::numeric, {m.group(2)})',
+            sql,
+            flags=re.DOTALL,
+        )
         return sql
 
     def _fetchall(self, sql: str, params=()):
@@ -526,7 +533,7 @@ class Database:
             JOIN productos p ON u.producto_id = p.id
             WHERE pr_p.precio > 0
               AND ABS((u.precio - pr_p.precio) * 100.0 / pr_p.precio) >= ?
-            ORDER BY ABS(variacion_pct) DESC
+            ORDER BY ABS((u.precio - pr_p.precio) * 100.0 / pr_p.precio) DESC
             LIMIT {int(limit)}
         """, (f"-{dias}", min_variacion))
 
