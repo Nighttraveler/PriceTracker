@@ -132,6 +132,13 @@ class Database:
         CREATE INDEX IF NOT EXISTS idx_productos_nombre       ON productos(nombre_normalizado)
     """
 
+    def _sync_pg_sequences(self):
+        """Avanza las secuencias al MAX(id) actual — necesario después de bulk inserts con IDs explícitos."""
+        tables = ["fuentes", "productos", "variantes", "precios"]
+        with self.conn.cursor() as cur:
+            for table in tables:
+                cur.execute(f"SELECT setval('{table}_id_seq', COALESCE(MAX(id), 1)) FROM {table}")
+
     def init_schema(self):
         ddl = self._DDL
         if self._pg:
@@ -139,6 +146,7 @@ class Database:
             with self.conn.cursor() as cur:
                 for stmt in [s.strip() for s in ddl.split(";") if s.strip()]:
                     cur.execute(stmt)
+            self._sync_pg_sequences()
         else:
             self.conn.executescript(ddl)
             self.conn.commit()
