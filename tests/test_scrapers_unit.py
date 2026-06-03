@@ -29,7 +29,7 @@ def _producto_vtex(nombre="Leche 1L", precio=1500.0, link="/leche-1l/p"):
     return {
         "productName": nombre,
         "link": link,
-        "items": [{"sellers": [{"commertialOffer": {"Price": precio}}]}],
+        "items": [{"sellers": [{"commertialOffer": {"Price": precio, "AvailableQuantity": 1}}]}],
     }
 
 

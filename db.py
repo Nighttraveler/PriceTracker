@@ -1,25 +1,97 @@
 #!/usr/bin/env python3
 """
-db.py — Capa de acceso a la base de datos SQLite para Hermes Price Tracker.
+db.py — Capa de acceso a la base de datos para Hermes Price Tracker.
+Soporta SQLite (default) y PostgreSQL (cuando DATABASE_URL=postgresql://...).
 """
 
 import os
-import sqlite3
 import argparse
 from pathlib import Path
 
 
 class Database:
     def __init__(self, path: str = ""):
-        if not path:
-            path = os.environ.get("DATABASE_PATH", "data/precios.db")
-        Path(str(path)).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(path, check_same_thread=False)
-        self.conn.row_factory = sqlite3.Row
-        self.conn.execute("PRAGMA journal_mode=WAL")
+        db_url = os.environ.get("DATABASE_URL", "")
+        if db_url.startswith("postgresql://"):
+            import psycopg2
+            self._pg = True
+            self.conn = psycopg2.connect(db_url)
+            self.conn.autocommit = True
+        else:
+            import sqlite3
+            self._pg = False
+            if not path:
+                if db_url.startswith("sqlite:///"):
+                    path = db_url.replace("sqlite:///", "")
+                else:
+                    path = os.environ.get("DATABASE_PATH", "data/precios.db")
+            Path(str(path)).parent.mkdir(parents=True, exist_ok=True)
+            self.conn = sqlite3.connect(path, check_same_thread=False)
+            self.conn.row_factory = sqlite3.Row
+            self.conn.execute("PRAGMA journal_mode=WAL")
 
-    def init_schema(self):
-        self.conn.executescript("""
+    # ── Helpers internos ─────────────────────────────────────────────────────
+
+    def _adapt_sql(self, sql: str) -> str:
+        """Convierte SQL SQLite → PostgreSQL (no-op si _pg es False)."""
+        if not self._pg:
+            return sql
+        sql = sql.replace("?", "%s")
+        # date('now', ? || ' days') ya tiene ? reemplazado por %s
+        sql = sql.replace(
+            "date('now', %s || ' days')",
+            "(CURRENT_DATE + (%s || ' days')::interval)",
+        )
+        sql = sql.replace("date(pr.fecha)", "DATE(pr.fecha)")
+        return sql
+
+    def _fetchall(self, sql: str, params=()):
+        sql = self._adapt_sql(sql)
+        if self._pg:
+            import psycopg2.extras
+            with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql, params or ())
+                return cur.fetchall()
+        return self.conn.execute(sql, params or ()).fetchall()
+
+    def _fetchone(self, sql: str, params=()):
+        sql = self._adapt_sql(sql)
+        if self._pg:
+            import psycopg2.extras
+            with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql, params or ())
+                return cur.fetchone()
+        return self.conn.execute(sql, params or ()).fetchone()
+
+    def _scalar(self, sql: str, params=()):
+        """Devuelve el primer valor de la primera fila (para COUNT, MAX, etc.)."""
+        sql = self._adapt_sql(sql)
+        if self._pg:
+            with self.conn.cursor() as cur:
+                cur.execute(sql, params or ())
+                row = cur.fetchone()
+                return row[0] if row else None
+        row = self.conn.execute(sql, params or ()).fetchone()
+        return row[0] if row else None
+
+    def _run(self, sql: str, params=()):
+        """Ejecuta un statement de escritura. Convierte INSERT OR IGNORE para PostgreSQL."""
+        needs_conflict = self._pg and "INSERT OR IGNORE INTO" in sql
+        if needs_conflict:
+            sql = sql.replace("INSERT OR IGNORE INTO", "INSERT INTO")
+        sql = self._adapt_sql(sql)
+        if needs_conflict:
+            sql = sql.rstrip() + " ON CONFLICT DO NOTHING"
+        if self._pg:
+            with self.conn.cursor() as cur:
+                cur.execute(sql, params or ())
+        else:
+            self.conn.execute(sql, params or ())
+            self.conn.commit()
+
+    # ── Schema ───────────────────────────────────────────────────────────────
+
+    _DDL = """
         CREATE TABLE IF NOT EXISTS fuentes (
             id INTEGER PRIMARY KEY,
             nombre TEXT NOT NULL UNIQUE,
@@ -51,89 +123,80 @@ class Database:
             moneda TEXT DEFAULT 'ARS'
         );
 
-        CREATE INDEX IF NOT EXISTS idx_precios_fecha     ON precios(fecha);
-        CREATE INDEX IF NOT EXISTS idx_precios_variante  ON precios(variante_id);
-
-        -- Composite: cubre JOIN por variante_id + filtro/orden por fecha en un solo índice
+        CREATE INDEX IF NOT EXISTS idx_precios_fecha          ON precios(fecha);
+        CREATE INDEX IF NOT EXISTS idx_precios_variante       ON precios(variante_id);
         CREATE INDEX IF NOT EXISTS idx_precios_variante_fecha ON precios(variante_id, fecha);
+        CREATE INDEX IF NOT EXISTS idx_variantes_producto     ON variantes(producto_id);
+        CREATE INDEX IF NOT EXISTS idx_variantes_fuente       ON variantes(fuente_id);
+        CREATE INDEX IF NOT EXISTS idx_productos_combo_cat    ON productos(es_combo, categoria);
+        CREATE INDEX IF NOT EXISTS idx_productos_nombre       ON productos(nombre_normalizado)
+    """
 
-        -- Permite JOIN inverso productos→variantes sin full-scan de variantes
-        CREATE INDEX IF NOT EXISTS idx_variantes_producto ON variantes(producto_id);
-
-        -- Cubre GROUP BY fuente_id en el CTE max_por_fuente (ya existe via UNIQUE,
-        -- pero este índice parcial es más angosto y rápido para esa query)
-        CREATE INDEX IF NOT EXISTS idx_variantes_fuente  ON variantes(fuente_id);
-
-        -- Acelera WHERE p.es_combo = 0 y el filtro de categoría en búsquedas
-        CREATE INDEX IF NOT EXISTS idx_productos_combo_cat ON productos(es_combo, categoria);
-
-        -- Permite LIKE 'término%' (starts-with) en buscar_productos
-        CREATE INDEX IF NOT EXISTS idx_productos_nombre ON productos(nombre_normalizado);
-        """)
-        self.conn.commit()
-        # Migración: agregar es_combo si la tabla existía sin esa columna
-        try:
-            self.conn.execute("ALTER TABLE productos ADD COLUMN es_combo INTEGER NOT NULL DEFAULT 0")
+    def init_schema(self):
+        ddl = self._DDL
+        if self._pg:
+            ddl = ddl.replace("INTEGER PRIMARY KEY", "SERIAL PRIMARY KEY")
+            with self.conn.cursor() as cur:
+                for stmt in [s.strip() for s in ddl.split(";") if s.strip()]:
+                    cur.execute(stmt)
+        else:
+            self.conn.executescript(ddl)
             self.conn.commit()
-        except Exception:
-            pass  # columna ya existe
+            try:
+                self.conn.execute("ALTER TABLE productos ADD COLUMN es_combo INTEGER NOT NULL DEFAULT 0")
+                self.conn.commit()
+            except Exception:
+                pass
+
+    # ── Escrituras ───────────────────────────────────────────────────────────
 
     def get_or_create_fuente(self, nombre: str, url_base: str) -> int:
-        cur = self.conn.execute(
+        self._run(
             "INSERT OR IGNORE INTO fuentes (nombre, url_base) VALUES (?, ?)",
-            (nombre, url_base)
+            (nombre, url_base),
         )
-        self.conn.commit()
-        row = self.conn.execute(
-            "SELECT id FROM fuentes WHERE nombre = ?", (nombre,)
-        ).fetchone()
-        return row["id"]
+        return self._fetchone("SELECT id FROM fuentes WHERE nombre = ?", (nombre,))["id"]
 
     def get_or_create_variante(self, producto_id: int, fuente_id: int,
                                 nombre_original: str, url: str = "") -> int:
-        self.conn.execute(
+        self._run(
             """INSERT OR IGNORE INTO variantes
                (producto_id, fuente_id, nombre_original, url_producto)
                VALUES (?, ?, ?, ?)""",
-            (producto_id, fuente_id, nombre_original, url)
+            (producto_id, fuente_id, nombre_original, url),
         )
-        self.conn.commit()
-        row = self.conn.execute(
+        return self._fetchone(
             "SELECT id FROM variantes WHERE fuente_id = ? AND nombre_original = ?",
-            (fuente_id, nombre_original)
-        ).fetchone()
-        return row["id"]
+            (fuente_id, nombre_original),
+        )["id"]
 
     def insert_producto(self, nombre_normalizado: str,
                         categoria: str = None, unidad: str = None,
                         es_combo: bool = False) -> int:
-        self.conn.execute(
+        self._run(
             """INSERT OR IGNORE INTO productos
                (nombre_normalizado, categoria, unidad, es_combo) VALUES (?, ?, ?, ?)""",
-            (nombre_normalizado, categoria, unidad, int(es_combo))
+            (nombre_normalizado, categoria, unidad, int(es_combo)),
         )
-        self.conn.commit()
-        row = self.conn.execute(
+        return self._fetchone(
             "SELECT id FROM productos WHERE nombre_normalizado = ?",
-            (nombre_normalizado,)
-        ).fetchone()
-        return row["id"]
+            (nombre_normalizado,),
+        )["id"]
 
     def insertar_precio(self, variante_id: int, precio: float, fecha: str):
-        self.conn.execute(
+        self._run(
             "INSERT INTO precios (variante_id, precio, fecha) VALUES (?, ?, ?)",
-            (variante_id, precio, fecha)
+            (variante_id, precio, fecha),
         )
-        self.conn.commit()
+
+    # ── Lecturas ─────────────────────────────────────────────────────────────
 
     def get_all_productos(self):
-        return self.conn.execute(
-            "SELECT id, nombre_normalizado FROM productos"
-        ).fetchall()
+        return self._fetchall("SELECT id, nombre_normalizado FROM productos")
 
     def get_precios_rango(self, dias: int = 7, incluir_combos: bool = False):
         combo_filter = "" if incluir_combos else "AND p.es_combo = 0"
-        return self.conn.execute(f"""
+        return self._fetchall(f"""
             SELECT p.nombre_normalizado, p.categoria, f.nombre as fuente,
                    pr.precio, pr.fecha, v.nombre_original, v.url_producto
             FROM precios pr
@@ -143,31 +206,28 @@ class Database:
             WHERE pr.fecha >= date('now', ? || ' days')
             {combo_filter}
             ORDER BY p.nombre_normalizado, pr.fecha DESC
-        """, (f"-{dias}",)).fetchall()
+        """, (f"-{dias}",))
 
     def stats(self):
-        stats = {
-            "productos": self.conn.execute("SELECT COUNT(*) FROM productos").fetchone()[0],
-            "variantes": self.conn.execute("SELECT COUNT(*) FROM variantes").fetchone()[0],
-            "precios":   self.conn.execute("SELECT COUNT(*) FROM precios").fetchone()[0],
-            "fuentes":   self.conn.execute("SELECT nombre FROM fuentes").fetchall(),
-            "ultima_fecha": self.conn.execute(
-                "SELECT MAX(fecha) FROM precios").fetchone()[0],
+        return {
+            "productos":    self._scalar("SELECT COUNT(*) FROM productos"),
+            "variantes":    self._scalar("SELECT COUNT(*) FROM variantes"),
+            "precios":      self._scalar("SELECT COUNT(*) FROM precios"),
+            "fuentes":      self._fetchall("SELECT nombre FROM fuentes"),
+            "ultima_fecha": self._scalar("SELECT MAX(fecha) FROM precios"),
         }
-        return stats
 
     def get_variantes_producto(self, producto_id: int):
-        """Devuelve una fila por fuente con la URL y nombre original de la variante."""
-        return self.conn.execute("""
+        return self._fetchall("""
             SELECT f.nombre as fuente, v.url_producto, v.nombre_original
             FROM variantes v
             JOIN fuentes f ON v.fuente_id = f.id
             WHERE v.producto_id = ?
             ORDER BY f.nombre
-        """, (producto_id,)).fetchall()
+        """, (producto_id,))
 
     def get_historial_producto(self, producto_id: int, dias: int = 90):
-        return self.conn.execute("""
+        return self._fetchall("""
             SELECT f.nombre as fuente, pr.precio, date(pr.fecha) as fecha
             FROM precios pr
             JOIN variantes v ON pr.variante_id = v.id
@@ -175,17 +235,16 @@ class Database:
             WHERE v.producto_id = ?
               AND pr.fecha >= date('now', ? || ' days')
             ORDER BY pr.fecha ASC
-        """, (producto_id, f"-{dias}")).fetchall()
+        """, (producto_id, f"-{dias}"))
 
     def get_producto_by_id(self, producto_id: int):
-        return self.conn.execute(
+        return self._fetchone(
             "SELECT id, nombre_normalizado, categoria FROM productos WHERE id = ?",
-            (producto_id,)
-        ).fetchone()
+            (producto_id,),
+        )
 
     def get_ahorro_por_categoria(self):
-        """Precio promedio por categoría y fuente (últimos precios disponibles)."""
-        return self.conn.execute("""
+        return self._fetchall("""
             WITH max_por_fuente AS (
                 SELECT v.fuente_id, MAX(date(pr.fecha)) AS max_fecha
                 FROM precios pr JOIN variantes v ON pr.variante_id = v.id
@@ -209,17 +268,12 @@ class Database:
             WHERE p.es_combo = 0
             GROUP BY p.categoria, f.nombre
             ORDER BY p.categoria, avg_precio
-        """).fetchall()
+        """)
 
     def get_carrito_optimo(self, top_n: int = 20):
-        """Top N productos en 2+ fuentes. Devuelve (productos_list, carrito_list).
-
-        carrito_list: lista ordenada por fuente, cada item tiene los productos
-        que conviene comprar ahí (los más baratos vs las otras fuentes).
-        """
         from collections import defaultdict
 
-        rows = self.conn.execute("""
+        rows = self._fetchall("""
             WITH max_por_fuente AS (
                 SELECT v.fuente_id, MAX(date(pr.fecha)) AS max_fecha
                 FROM precios pr JOIN variantes v ON pr.variante_id = v.id
@@ -255,7 +309,7 @@ class Database:
             JOIN topn t ON l.producto_id = t.producto_id
             JOIN productos p ON l.producto_id = p.id
             ORDER BY t.diff_pct DESC, p.nombre_normalizado, l.fuente
-        """, (top_n,)).fetchall()
+        """, (top_n,))
 
         productos = {}
         for r in rows:
@@ -304,52 +358,47 @@ class Database:
         return list(productos.values()), carrito
 
     def get_all_fuentes(self):
-        return [r["nombre"] for r in self.conn.execute(
+        return [r["nombre"] for r in self._fetchall(
             "SELECT nombre FROM fuentes ORDER BY nombre"
-        ).fetchall()]
+        )]
 
     def get_all_categorias(self):
-        return [r["categoria"] for r in self.conn.execute(
+        return [r["categoria"] for r in self._fetchall(
             "SELECT DISTINCT categoria FROM productos WHERE categoria IS NOT NULL AND es_combo = 0 ORDER BY categoria"
-        ).fetchall()]
+        )]
 
     def buscar_productos(self, q: str = "", fuentes: list = None, categorias: list = None,
                          max_productos: int = 200):
-        """Búsqueda de productos con filtros opcionales de fuente y categoría.
-
-        Ordena por relevancia: productos cuyo nombre empieza con el primer
-        token del query aparecen primero; luego el resto alfabéticamente.
-        """
         tokens = q.strip().lower().split() if q.strip() else []
+        ph = "%s" if self._pg else "?"
         where = ["p.es_combo = 0"]
         params = []
 
         for token in tokens:
-            where.append("p.nombre_normalizado LIKE ?")
+            where.append(f"p.nombre_normalizado LIKE {ph}")
             params.append(f"%{token}%")
 
         if fuentes:
-            ph = ",".join("?" * len(fuentes))
-            where.append(f"l.fuente IN ({ph})")
+            placeholders = ",".join([ph] * len(fuentes))
+            where.append(f"l.fuente IN ({placeholders})")
             params.extend(fuentes)
 
         if categorias:
-            ph = ",".join("?" * len(categorias))
-            where.append(f"p.categoria IN ({ph})")
+            placeholders = ",".join([ph] * len(categorias))
+            where.append(f"p.categoria IN ({placeholders})")
             params.extend(categorias)
 
-        # Columna de relevancia: 0 si empieza con el primer token, 1 si no
         if tokens:
-            relevancia_sql = "CASE WHEN p.nombre_normalizado LIKE ? THEN 0 ELSE 1 END"
-            # El param de starts-with va antes de los demás (se inyecta al final de la query)
+            relevancia_sql = f"CASE WHEN p.nombre_normalizado LIKE {ph} THEN 0 ELSE 1 END"
             starts_param = f"{tokens[0]}%"
         else:
             relevancia_sql = "0"
             starts_param = None
 
+        date_fn = "DATE(pr.fecha)" if self._pg else "date(pr.fecha)"
         sql = f"""
             WITH max_por_fuente AS (
-                SELECT v.fuente_id, MAX(date(pr.fecha)) AS max_fecha
+                SELECT v.fuente_id, MAX({date_fn}) AS max_fecha
                 FROM precios pr JOIN variantes v ON pr.variante_id = v.id
                 GROUP BY v.fuente_id
             ),
@@ -360,7 +409,7 @@ class Database:
                 JOIN variantes v ON pr.variante_id = v.id
                 JOIN fuentes f ON v.fuente_id = f.id
                 JOIN max_por_fuente m ON v.fuente_id = m.fuente_id
-                    AND date(pr.fecha) = m.max_fecha
+                    AND {date_fn} = m.max_fecha
             )
             SELECT p.id, p.nombre_normalizado, p.categoria,
                    l.fuente, l.precio, l.url_producto,
@@ -371,12 +420,18 @@ class Database:
             ORDER BY relevancia, p.nombre_normalizado, l.fuente
             LIMIT {max_productos * 6}
         """
-        # El param de relevancia (CASE en SELECT) va PRIMERO porque precede al WHERE en el SQL
         all_params = ([starts_param] if starts_param else []) + params
-        rows = self.conn.execute(sql, all_params).fetchall()
+
+        if self._pg:
+            import psycopg2.extras
+            with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql, all_params or ())
+                rows = cur.fetchall()
+        else:
+            rows = self.conn.execute(sql, all_params or ()).fetchall()
 
         productos = {}
-        orden = []  # preserva el orden de primera aparición (= orden de relevancia del SQL)
+        orden = []
         for r in rows:
             pid = r["id"]
             if pid not in productos:
@@ -409,10 +464,12 @@ class Database:
     def get_precios_carrito(self, producto_ids: list):
         if not producto_ids:
             return []
-        placeholders = ",".join("?" * len(producto_ids))
-        return self.conn.execute(f"""
+        ph = "%s" if self._pg else "?"
+        placeholders = ",".join([ph] * len(producto_ids))
+        date_fn = "DATE(pr.fecha)" if self._pg else "date(pr.fecha)"
+        sql = f"""
             WITH max_por_fuente AS (
-                SELECT v.fuente_id, MAX(date(pr.fecha)) AS max_fecha
+                SELECT v.fuente_id, MAX({date_fn}) AS max_fecha
                 FROM precios pr JOIN variantes v ON pr.variante_id = v.id
                 GROUP BY v.fuente_id
             ),
@@ -422,7 +479,7 @@ class Database:
                 JOIN variantes v ON pr.variante_id = v.id
                 JOIN fuentes f ON v.fuente_id = f.id
                 JOIN max_por_fuente m ON v.fuente_id = m.fuente_id
-                    AND date(pr.fecha) = m.max_fecha
+                    AND {date_fn} = m.max_fecha
             )
             SELECT p.id, p.nombre_normalizado, p.categoria,
                    l.fuente, l.precio, l.url_producto
@@ -430,14 +487,20 @@ class Database:
             JOIN latest l ON p.id = l.producto_id
             WHERE p.id IN ({placeholders})
             ORDER BY p.nombre_normalizado, l.fuente
-        """, producto_ids).fetchall()
+        """
+        if self._pg:
+            import psycopg2.extras
+            with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql, producto_ids)
+                return cur.fetchall()
+        return self.conn.execute(sql, producto_ids).fetchall()
 
     def get_highlights(self, dias: int = 7, min_variacion: float = 5.0, limit: int = 50):
-        """Productos con mayor variación de precio en el período."""
-        return self.conn.execute(f"""
+        date_fn = "DATE(pr.fecha)" if self._pg else "date(pr.fecha)"
+        return self._fetchall(f"""
             WITH precios_rango AS (
                 SELECT v.producto_id, f.nombre as fuente,
-                       pr.precio, date(pr.fecha) as fecha,
+                       pr.precio, {date_fn} as fecha,
                        ROW_NUMBER() OVER (PARTITION BY v.producto_id, f.nombre ORDER BY pr.fecha ASC)  as rn_asc,
                        ROW_NUMBER() OVER (PARTITION BY v.producto_id, f.nombre ORDER BY pr.fecha DESC) as rn_desc
                 FROM precios pr
@@ -457,7 +520,7 @@ class Database:
               AND ABS((u.precio - pr_p.precio) * 100.0 / pr_p.precio) >= ?
             ORDER BY ABS(variacion_pct) DESC
             LIMIT {int(limit)}
-        """, (f"-{dias}", min_variacion)).fetchall()
+        """, (f"-{dias}", min_variacion))
 
 
 if __name__ == "__main__":

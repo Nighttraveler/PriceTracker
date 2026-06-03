@@ -37,13 +37,11 @@ def run_reporte():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Hermes Scheduler")
-    parser.add_argument("--day", default="lunes",
+    parser.add_argument("--hour", type=int, default=7,
+                        help="Hora (0-23) para el scraping (default: 7)")
+    parser.add_argument("--report-day", default="lunes",
                         choices=list(DIAS_ES.keys()),
-                        help="Día de la semana para el reporte")
-    parser.add_argument("--hour", type=int, default=6,
-                        help="Hora (0-23) para correr tareas")
-    parser.add_argument("--scrape-interval", type=int, default=24,
-                        help="Intervalo en horas entre scrapings")
+                        help="Día de la semana para el reporte semanal")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -56,16 +54,18 @@ if __name__ == "__main__":
     )
 
     hora_str = f"{args.hour:02d}:00"
-    dia_en = DIAS_ES[args.day]
 
-    # Scraping cada N horas
-    schedule.every(args.scrape_interval).hours.do(run_scraping)
+    # Scraping lunes, miércoles y viernes a la hora configurada
+    schedule.every().monday.at(hora_str).do(run_scraping)
+    schedule.every().wednesday.at(hora_str).do(run_scraping)
+    schedule.every().friday.at(hora_str).do(run_scraping)
 
-    # Reporte semanal el día y hora configurados
+    # Reporte semanal
+    dia_en = DIAS_ES[args.report_day]
     getattr(schedule.every(), dia_en).at(hora_str).do(run_reporte)
 
-    log.info(f"Scheduler iniciado — scraping cada {args.scrape_interval}h, "
-             f"reporte los {args.day} a las {hora_str}")
+    log.info(f"Scheduler iniciado — scraping lun/mié/vie a las {hora_str}, "
+             f"reporte los {args.report_day}")
 
     # Ejecutar una vez al arrancar
     run_scraping()
