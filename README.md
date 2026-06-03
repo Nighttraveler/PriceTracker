@@ -1,13 +1,13 @@
 # Price Tracker
 
-Scraper de precios de supermercados argentinos con dashboard web. Rastrea productos de La Anónima, Día, Encombo y Carrefour, normaliza los nombres, persiste en SQLite y expone un dashboard para comparar precios y detectar variaciones.
+Scraper de precios de supermercados argentinos con dashboard web. Rastrea productos de La Anónima, Día, Encombo y Carrefour, normaliza nombres entre fuentes, persiste en PostgreSQL (o SQLite) y expone un dashboard para comparar precios y detectar variaciones.
 
 ## Fuentes soportadas
 
 | Fuente | Tecnología | Categorías scrapeadas |
 |---|---|---|
 | La Anónima | HTML + data-attributes | Almacén, bebidas, lácteos, limpieza, perfumería, congelados, carnicería |
-| Día | VTEX (HTML) | Almacén, lácteos, bebidas, carnes, limpieza, higiene, congelados |
+| Día | VTEX Catalog API REST | Almacén, desayuno, bebidas, frescos, congelados, limpieza, perfumería, mascotas |
 | Encombo | HTML | Múltiples categorías |
 | Carrefour | VTEX Catalog API REST | Almacén, bebidas, lácteos, carnes, frutas/verduras, panadería, congelados, limpieza, perfumería, mascotas |
 
@@ -17,156 +17,194 @@ Scraper de precios de supermercados argentinos con dashboard web. Rastrea produc
 
 ## Stack
 
-- **Python 3.11+** con [uv](https://github.com/astral-sh/uv) para gestión de dependencias
-- **SQLite** — append-only, nunca se borran registros históricos de precios
+- **Python 3.11+**
+- **PostgreSQL 16** (producción) / **SQLite** (desarrollo local)
 - **Flask 3** — dashboard web
-- **rapidfuzz** — fuzzy matching para normalizar nombres de productos entre fuentes
+- **psycopg2** — driver PostgreSQL
+- **rapidfuzz** — fuzzy matching para normalizar nombres entre fuentes
 - **BeautifulSoup4 + lxml** — parsing HTML
+- **Docker + Docker Compose** — contenedores para app, scraper y DB
 - **pytest** — suite de tests unitarios e integración
 
 ---
 
-## Instalación
+## Inicio rápido con Docker
 
 ```bash
 git clone <repo>
 cd price-tracker
-uv venv
-uv pip install -r requirements.txt
+docker compose up -d
 ```
 
-Inicializar la base de datos:
+Esto levanta tres servicios:
+- **db** — PostgreSQL 16 en `localhost:5432`
+- **app** — Dashboard Flask en `http://localhost:5000`
+- **scraper** — Scheduler que corre el scraping automático lun/mié/vie a las 7:00
+
+### Migrar datos existentes de SQLite a PostgreSQL
+
+Si ya tenés un `data/precios.db`, migralo con:
 
 ```bash
-uv run python db.py
+docker compose up -d db
+DATABASE_URL=postgresql://user:password@localhost:5432/price_tracker \
+  python scripts/migrate_sqlite_to_postgres.py
 ```
 
 ---
 
-## Uso
-
-### Scraping
+## Setup local (sin Docker)
 
 ```bash
-# Todas las fuentes
-uv run python tracker.py --source all
-
-# Una fuente específica
-uv run python tracker.py --source carrefour
-
-# Sin guardar en DB (dry-run)
-uv run python tracker.py --source dia --dry-run
-
-# Limitar productos por fuente (útil para pruebas)
-uv run python tracker.py --source anonima --limit 50
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Fuentes disponibles: `all`, `anonima`, `dia`, `encombo`, `carrefour`
-
-### Dashboard web
+Por default usa SQLite en `data/precios.db`. Para usar PostgreSQL, setear:
 
 ```bash
-uv run python app.py
-# → http://<ip>:5000
+export DATABASE_URL=postgresql://user:password@localhost:5432/price_tracker
 ```
 
-El servidor escucha en `0.0.0.0:5000` por defecto — accesible desde cualquier dispositivo en la misma red.
+---
 
-| Ruta | Descripción |
-|---|---|
-| `/` | Stats generales + highlights de variaciones |
-| `/precios` | Tabla comparativa paginada por fuente, con filtro por categoría |
-| `/ahorro` | Precio promedio por categoría/fuente y diferencias entre fuentes |
-| `/producto/<id>` | Historial de precios con gráfico Chart.js |
-
-### Reporte HTML estático
+## Comandos
 
 ```bash
-uv run python reporter.py --output reporte.html --days 7
+# Activar virtualenv (desarrollo local)
+source venv/bin/activate
+
+# Scraping
+python tracker.py --source all           # todas las fuentes
+python tracker.py --source dia           # fuente individual
+python tracker.py --source dia --dry-run --limit 20  # sin guardar, útil para debug
+
+# Dashboard web
+python app.py                            # → http://0.0.0.0:5000
+
+# Reporte HTML estático
+python reporter.py --output reporte.html --days 7
+
+# Stats de la DB
+python db.py --stats
+
+# Tests (unitarios, sin red)
+pytest tests/ -m "not integration"
+
+# Tests de integración (hacen requests HTTP reales)
+pytest tests/ -m integration
 ```
 
-### Scheduler (daemon)
+---
+
+## Automatización (scheduler)
+
+El servicio `scraper` de Docker corre `scheduler.py` que programa scraping automático:
+
+- **Lunes, miércoles y viernes a las 7:00** — scraping de todas las fuentes
+- **Lunes a las 7:00** — generación de reporte HTML semanal
+- Corre un scrape inmediato al arrancar
 
 ```bash
-# Scraping cada 24h, reporte los lunes a las 6:00
-uv run python scheduler.py --day lunes --hour 6 --scrape-interval 24
+# Correr el scheduler manualmente (configura la hora)
+python scheduler.py --hour 7 --report-day lunes
+
+# Ver logs del scraper en Docker
+docker compose logs scraper -f
 ```
 
-### Stats de la DB
+---
 
-```bash
-uv run python db.py --stats
-```
+## Base de datos
+
+`db.py` soporta SQLite y PostgreSQL de forma transparente mediante `DATABASE_URL`:
+
+| Variable | Valor | Comportamiento |
+|---|---|---|
+| `DATABASE_URL` | `postgresql://user:pass@host/db` | Conecta a PostgreSQL con psycopg2 |
+| `DATABASE_URL` | `sqlite:///ruta/archivo.db` | SQLite en la ruta especificada |
+| `DATABASE_PATH` | `ruta/archivo.db` | SQLite (fallback si no hay DATABASE_URL) |
+| *(ninguna)* | — | SQLite en `data/precios.db` |
+
+> **Importante tras migrar datos a PostgreSQL**: las secuencias se sincronizan automáticamente en cada arranque (`init_schema()` llama `_sync_pg_sequences()`), por lo que no hay conflictos de `id` aunque la migración haya insertado filas con IDs explícitos.
 
 ---
 
 ## Arquitectura
 
+El flujo es: **scraper → normalizer → db → app/reporter**
+
 ```
 price-tracker/
-├── app.py              # Flask — dashboard web
-├── tracker.py          # CLI principal de scraping
-├── db.py               # Capa de acceso a SQLite
-├── normalizer.py       # Normalización y categorización de productos
+├── app.py              # Flask — dashboard web (5 rutas)
+├── tracker.py          # CLI de scraping, orquesta todas las fuentes
+├── db.py               # Capa de acceso: SQLite + PostgreSQL via DATABASE_URL
+├── normalizer.py       # Fuzzy matching, categorías, caché in-memory
 ├── reporter.py         # Generación de reportes HTML estáticos
-├── scheduler.py        # Daemon con schedule configurable
+├── scheduler.py        # Cron lun/mié/vie 7am via librería schedule
 │
 ├── scrapers/
-│   ├── base.py         # BaseScraper con limpiar_precio() y requests con delay
-│   ├── anonima.py      # La Anónima (HTML + data-attributes)
-│   ├── dia.py          # Día (VTEX HTML con paginación)
-│   ├── encombo.py      # Encombo (HTML)
-│   └── carrefour.py    # Carrefour (VTEX Catalog API REST, paginado con header resources)
+│   ├── base.py         # BaseScraper: requests con delay, limpiar_precio()
+│   ├── anonima.py      # La Anónima — HTML + data-attributes
+│   ├── dia.py          # Día — VTEX Catalog API REST con paginación
+│   ├── encombo.py      # Encombo — HTML
+│   └── carrefour.py    # Carrefour — VTEX Catalog API REST
 │
 ├── templates/          # Jinja2 + Bootstrap 5
 │   ├── base.html
-│   ├── index.html
-│   ├── precios.html
-│   ├── ahorro.html
-│   └── producto.html
+│   ├── index.html      # Stats + highlights de variaciones
+│   ├── precios.html    # Tabla comparativa paginada
+│   ├── ahorro.html     # Carrito óptimo + promedios por categoría
+│   ├── buscar.html     # Búsqueda con filtros
+│   └── producto.html   # Historial con gráfico Chart.js
 │
 ├── scripts/
-│   ├── renormalizar_db.py           # Actualiza IDs de variantes
-│   ├── renormalizar_categorias.py   # Recalcula categorías de todos los productos
-│   ├── migrar_fechas.py             # Migra columna fecha de TEXT a TIMESTAMP
-│   └── corregir_timestamps.py       # Corrige timestamps inconsistentes
+│   ├── migrate_sqlite_to_postgres.py  # Migración one-time SQLite → PostgreSQL
+│   ├── renormalizar_db.py             # Re-corre fuzzy matching para todas las variantes
+│   ├── renormalizar_categorias.py     # Recalcula categorías de todos los productos
+│   ├── migrar_fechas.py               # TEXT → TIMESTAMP en columna fecha
+│   └── corregir_timestamps.py         # Corrige timestamps inconsistentes
 │
 ├── tests/
-│   ├── conftest.py                  # Marker "integration"
-│   ├── test_normalizer.py           # 53 tests unitarios
-│   ├── test_limpiar_precio.py       # 8 tests de parsing de precios
-│   └── test_scrapers_integration.py # 4 tests con requests reales
+│   ├── conftest.py
+│   ├── test_normalizer.py              # ~70 tests unitarios de normalización
+│   ├── test_limpiar_precio.py          # Tests de parsing de precios
+│   ├── test_scrapers_unit.py           # Tests con mocks (sin red)
+│   ├── test_scrapers_filtering.py      # Tests de filtros de disponibilidad
+│   └── test_scrapers_integration.py   # Tests con requests HTTP reales
 │
-├── data/
-│   └── precios.db      # SQLite (no versionado)
-├── logs/               # Logs de scraping (no versionados)
-└── requirements.txt
+├── Dockerfile
+├── docker-compose.yml  # Servicios: db, app, scraper
+├── Makefile
+└── data/
+    └── precios.db      # SQLite local (no versionado)
 ```
 
 ---
 
-## Schema de la base de datos
+## Schema
 
 ```sql
 CREATE TABLE fuentes (
-    id      INTEGER PRIMARY KEY,
-    nombre  TEXT NOT NULL UNIQUE,   -- 'anonima', 'dia', 'encombo', 'carrefour'
+    id       INTEGER PRIMARY KEY,
+    nombre   TEXT NOT NULL UNIQUE,   -- 'anonima', 'dia', 'encombo', 'carrefour'
     url_base TEXT NOT NULL
 );
 
 CREATE TABLE productos (
-    id                  INTEGER PRIMARY KEY,
-    nombre_normalizado  TEXT NOT NULL UNIQUE,
-    categoria           TEXT,       -- ver categorías más abajo
-    unidad              TEXT,       -- '1000ml', '500g', etc.
-    es_combo            INTEGER NOT NULL DEFAULT 0
+    id                 INTEGER PRIMARY KEY,
+    nombre_normalizado TEXT NOT NULL UNIQUE,
+    categoria          TEXT,
+    unidad             TEXT,
+    es_combo           INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE variantes (
     id              INTEGER PRIMARY KEY,
     producto_id     INTEGER REFERENCES productos(id),
     fuente_id       INTEGER REFERENCES fuentes(id),
-    nombre_original TEXT NOT NULL,  -- nombre exacto en el sitio
+    nombre_original TEXT NOT NULL,
     url_producto    TEXT,
     UNIQUE(fuente_id, nombre_original)
 );
@@ -180,99 +218,72 @@ CREATE TABLE precios (
 );
 ```
 
-Los registros de `precios` son **append-only** — nunca se actualizan ni borran.
+`precios` es **append-only** — nunca se actualizan ni borran registros. Un mismo producto tiene una fila en `productos`, una `variante` por fuente donde aparece, y sus precios acumulados en `precios`.
+
+---
+
+## Dashboard web
+
+| Ruta | Descripción |
+|---|---|
+| `/` | Stats generales + highlights de variaciones de precio |
+| `/precios` | Tabla comparativa paginada, filtrable por categoría |
+| `/ahorro` | Precio promedio por categoría/fuente + carrito óptimo (productos más baratos en 2+ fuentes) |
+| `/buscar` | Búsqueda con filtros de fuente y categoría |
+| `/producto/<id>` | Historial de precios con gráfico Chart.js |
 
 ---
 
 ## Normalización de productos
 
-El módulo `normalizer.py` unifica nombres de productos entre fuentes distintas usando fuzzy matching (`rapidfuzz`).
+`normalizer.py` unifica nombres entre fuentes usando `fuzz.token_sort_ratio` (umbral 98). Antes de comparar, `_normalizar_para_match()` aplica equivalencias: `cc → ml`, `grs → g`, une número+unidad (`400 ml → 400ml`), y quita conectores (`con`, `y`, `x`).
 
-### Flujo
-
-1. `limpiar(nombre)` — lowercase, elimina acentos y caracteres especiales, normaliza espacios
-2. Fuzzy matching contra productos existentes con `fuzz.token_sort_ratio`
-3. Si el score ≥ 98 → mismo producto. Si no → nuevo producto
-4. Al crear: detecta categoría y unidad, marca `es_combo` si aplica
-
-### Umbrales y reglas
-
-- **UMBRAL_SIMILITUD = 98** — alto para evitar fusiones incorrectas
-- Si dos nombres tienen números distintos, el score se fuerza a 0 (evita unir "Vino X 750cc" con "Vino X 1L")
-- Un producto se marca `es_combo = 1` si su primera palabra es `combo`
-
-### Matching de categorías
-
-`detectar_categoria()` aplica tres estrategias según el keyword:
-
-| Tipo | Criterio | Ejemplo |
-|---|---|---|
-| Multi-palabra | Substring en nombre completo | `"agua mineral"` en `"agua mineral sin gas..."` |
-| Palabra larga (≥5 chars) | Prefix match — cubre plurales | `"galletita"` matchea `"galletitas"` |
-| Palabra corta (<5 chars) | Match exacto — evita falsos positivos | `"te"` no matchea `"detergente"` |
+**Regla clave**: si los números en dos nombres difieren, el score se fuerza a 0 — evita fusionar "Leche 1L" con "Leche 200ml".
 
 ### Categorías disponibles
 
 `combos`, `conservas`, `fiambreria`, `galletitas`, `confiteria`, `snacks`, `condimentos`, `lacteos`, `almacen`, `congelados`, `carnes`, `panificados`, `bebidas`, `limpieza`, `higiene`, `verduleria`, `otros`
 
+El orden en `CATEGORIAS` importa: las más específicas van primero para evitar falsos positivos (ej. `mascotas` antes de `carnes`).
+
 ---
 
-## Scraper de Carrefour — detalle técnico
+## Scrapers VTEX (Día y Carrefour)
 
-Carrefour Argentina usa VTEX. El scraper consume la API de catálogo directamente:
+Usan la API de catálogo VTEX REST:
 
 ```
 GET /api/catalog_system/pub/products/search?fq=C:{cat_id}&_from={n}&_to={n+49}
 ```
 
-- Responde hasta 50 productos por llamada
-- El header `resources: 0-49/6016` informa el total — se usa para terminar la paginación
-- Sin autenticación requerida
-
-Categorías scrapeadas por ID VTEX: 161 (Almacén), 222 (Desayuno), 255 (Bebidas), 292 (Lácteos), 321 (Carnes), 330 (Frutas y verduras), 336 (Panadería), 347 (Congelados), 359 (Limpieza), 402 (Perfumería), 471 (Mascotas).
-
----
-
-## Tests
-
-```bash
-# Tests unitarios (sin red, rápidos)
-uv run pytest tests/ -m "not integration"
-
-# Tests de integración (hacen requests HTTP reales)
-uv run pytest tests/ -m integration
-
-# Todo
-uv run pytest tests/
-```
-
-| Archivo | Tests | Qué cubre |
-|---|---|---|
-| `test_normalizer.py` | 53 | `limpiar`, `es_combo`, `detectar_categoria` (todas las categorías, falsos positivos, plurales, multi-word), clase `Normalizer` con mock DB |
-| `test_limpiar_precio.py` | 8 | Parsing de precios: separadores de miles/decimal, bug Magento 5 dígitos, símbolos de moneda |
-| `test_scrapers_integration.py` | 4 | Fetch real de cada fuente, valida estructura y tipos |
+- 50 productos por llamada; el header `resources: 0-49/6016` informa el total
+- Solo IDs de categorías padre de nivel 1 devuelven resultados
+- El árbol de categorías se obtiene dinámicamente desde `/api/catalog_system/pub/category/tree/3`
+- Límite VTEX: offset máximo 2500 (`VTEX_MAX_OFFSET`)
+- Solo se incluyen productos con `AvailableQuantity > 0`
 
 ---
 
 ## Scripts de mantenimiento
 
 ```bash
-# Recalcular categorías de todos los productos con las reglas actuales
-uv run python scripts/renormalizar_categorias.py
+# Después de cambiar reglas de categorías en normalizer.py
+python scripts/renormalizar_categorias.py
 
-# Actualizar IDs de variantes tras cambios en el normalizador
-uv run python scripts/renormalizar_db.py
+# Después de cambiar lógica de fuzzy matching
+# Re-corre el matching para todas las variantes; fusiona duplicados y limpia huérfanos.
+python scripts/renormalizar_db.py
 
-# Migrar columna fecha de TEXT a TIMESTAMP (migración one-time)
-uv run python scripts/migrar_fechas.py
+# Migración one-time SQLite → PostgreSQL (requiere DATABASE_URL seteado)
+python scripts/migrate_sqlite_to_postgres.py
 ```
 
 ---
 
 ## Pitfalls conocidos
 
-- **Scraper rompe por cambio de HTML**: revisar los selectores CSS en `scrapers/<fuente>.py`. La Anónima usa `data-attributes`; Día usa clases VTEX (`vtex-product-summary-*`).
-- **Fuzzy matching excesivo**: si productos distintos se fusionan, aumentar `UMBRAL_SIMILITUD` en `normalizer.py`.
-- **Encombo timeout**: scraper lento por anti-ban delays. Usar `--limit` en desarrollo.
-- **Carrefour**: si la API empieza a requerir auth, revisar los headers en `scrapers/carrefour.py`.
-- **DB bloqueada**: SQLite en WAL mode. Si hay lock, esperar y reintentar; revisar procesos activos con `fuser data/precios.db`.
+- **Datos incompletos en `/ahorro`**: si se corrió `tracker.py --limit N` en algún día, esa fecha queda como la "más reciente" con datos parciales. La solución es correr un scrape completo sin `--limit` para generar una fecha más reciente con datos completos.
+- **Secuencias PostgreSQL**: al migrar datos con IDs explícitos desde SQLite, las secuencias quedan desincronizadas. `db.init_schema()` las sincroniza automáticamente en cada arranque.
+- **Cambio de HTML en scrapers**: La Anónima y Encombo pueden romperse por cambios de selectores CSS. Día y Carrefour usan API REST y son más estables.
+- **Encombo timeout**: delays anti-ban altos. Usar `--limit` en desarrollo.
+- **Fuzzy matching lento**: el primer scrape de una fuente grande (~7500 productos para Anónima) puede tardar varios minutos. El caché in-memory lo mitiga para runs posteriores en la misma sesión.
