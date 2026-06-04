@@ -30,6 +30,23 @@ pytest tests/test_normalizer.py::test_detectar_categoria_lacteos
 
 # Stats de la DB
 python db.py --stats
+
+# Consultas directas a PostgreSQL (la DB que usa el stack Docker)
+make psql                          # shell interactivo
+make psql Q="SELECT COUNT(*) FROM productos;"  # query one-shot
+# O directamente con DATABASE_URL:
+DATABASE_URL=postgresql://user:password@localhost:5432/price_tracker python db.py --stats
+```
+
+## Base de datos activa: PostgreSQL
+
+**Siempre usar PostgreSQL para consultas y pruebas**, no el archivo SQLite local.  
+El stack Docker expone PostgreSQL en `localhost:5432`.  
+`DATABASE_URL=postgresql://user:password@localhost:5432/price_tracker`
+
+Para scripts Python que usen `db.py`, pasarlo como variable de entorno:
+```bash
+DATABASE_URL=postgresql://user:password@localhost:5432/price_tracker python <script>.py
 ```
 
 ## Arquitectura central

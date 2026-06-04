@@ -242,13 +242,22 @@ class Database:
         """, (producto_id,))
 
     def get_historial_producto(self, producto_id: int, dias: int = 90):
+        # Si el mismo producto tiene varias variantes de la misma fuente,
+        # nos quedamos con el registro más reciente (MAX id) por (fuente, día).
         return self._fetchall("""
+            WITH last_per_day AS (
+                SELECT MAX(pr.id) as id
+                FROM precios pr
+                JOIN variantes v ON pr.variante_id = v.id
+                WHERE v.producto_id = ?
+                  AND pr.fecha >= date('now', ? || ' days')
+                GROUP BY v.fuente_id, date(pr.fecha)
+            )
             SELECT f.nombre as fuente, pr.precio, date(pr.fecha) as fecha
             FROM precios pr
+            JOIN last_per_day l ON pr.id = l.id
             JOIN variantes v ON pr.variante_id = v.id
             JOIN fuentes f ON v.fuente_id = f.id
-            WHERE v.producto_id = ?
-              AND pr.fecha >= date('now', ? || ' days')
             ORDER BY pr.fecha ASC
         """, (producto_id, f"-{dias}"))
 
@@ -513,15 +522,22 @@ class Database:
     def get_highlights(self, dias: int = 7, min_variacion: float = 5.0, limit: int = 50):
         date_fn = "DATE(pr.fecha)" if self._pg else "date(pr.fecha)"
         return self._fetchall(f"""
-            WITH precios_rango AS (
+            WITH last_per_day AS (
+                SELECT MAX(pr.id) as id
+                FROM precios pr
+                JOIN variantes v ON pr.variante_id = v.id
+                WHERE pr.fecha >= date('now', ? || ' days')
+                GROUP BY v.producto_id, v.fuente_id, {date_fn}
+            ),
+            precios_rango AS (
                 SELECT v.producto_id, f.nombre as fuente,
                        pr.precio, {date_fn} as fecha,
                        ROW_NUMBER() OVER (PARTITION BY v.producto_id, f.nombre ORDER BY pr.fecha ASC)  as rn_asc,
                        ROW_NUMBER() OVER (PARTITION BY v.producto_id, f.nombre ORDER BY pr.fecha DESC) as rn_desc
-                FROM precios pr
+                FROM last_per_day l
+                JOIN precios pr ON pr.id = l.id
                 JOIN variantes v ON pr.variante_id = v.id
                 JOIN fuentes f ON v.fuente_id = f.id
-                WHERE pr.fecha >= date('now', ? || ' days')
             ),
             primero AS (SELECT producto_id, fuente, precio FROM precios_rango WHERE rn_asc = 1),
             ultimo  AS (SELECT producto_id, fuente, precio FROM precios_rango WHERE rn_desc = 1)
@@ -533,6 +549,7 @@ class Database:
             JOIN productos p ON u.producto_id = p.id
             WHERE pr_p.precio > 0
               AND ABS((u.precio - pr_p.precio) * 100.0 / pr_p.precio) >= ?
+              AND ABS((u.precio - pr_p.precio) * 100.0 / pr_p.precio) <= 1000
             ORDER BY ABS((u.precio - pr_p.precio) * 100.0 / pr_p.precio) DESC
             LIMIT {int(limit)}
         """, (f"-{dias}", min_variacion))

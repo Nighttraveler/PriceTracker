@@ -109,7 +109,9 @@
         <td>$ {{ "%.2f"|format(primero) }}</td>
         <td>$ {{ "%.2f"|format(ultimo) }}</td>
         <td>
-          {% if variacion > 0 %}
+          {% if variacion > 1000 or variacion < -99 %}
+            <span class="badge bg-warning text-dark">⚠ datos inconsistentes</span>
+          {% elif variacion > 0 %}
             <span class="badge-up">▲ {{ variacion }}%</span>
           {% elif variacion < 0 %}
             <span class="badge-down">▼ {{ variacion | abs }}%</span>

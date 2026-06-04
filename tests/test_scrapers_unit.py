@@ -37,8 +37,8 @@ def _producto_vtex(nombre="Leche 1L", precio=1500.0, link="/leche-1l/p"):
 
 class TestCarrefourVtexLimit:
 
-    @patch("scrapers.carrefour.requests.get")
-    @patch("scrapers.carrefour.time.sleep")
+    @patch("scrapers.vtex_base.requests.get")
+    @patch("scrapers.vtex_base.time.sleep")
     def test_no_supera_offset_2500(self, mock_sleep, mock_get):
         """El scraper nunca debe hacer un request con _from >= VTEX_MAX_OFFSET."""
         # Categoría con 10000 productos según el header (más que el límite VTEX)
@@ -60,8 +60,8 @@ class TestCarrefourVtexLimit:
             f"Se solicitó offset >= {VTEX_MAX_OFFSET}: {offsets_solicitados}"
         )
 
-    @patch("scrapers.carrefour.requests.get")
-    @patch("scrapers.carrefour.time.sleep")
+    @patch("scrapers.vtex_base.requests.get")
+    @patch("scrapers.vtex_base.time.sleep")
     def test_para_cuando_api_retorna_vacio(self, mock_sleep, mock_get):
         """Si la API devuelve lista vacía, el scraper termina esa categoría."""
         mock_get.return_value = _mock_response(json_data=[])
@@ -76,8 +76,8 @@ class TestCarrefourVtexLimit:
 
 class TestCarrefourRateLimit:
 
-    @patch("scrapers.carrefour.requests.get")
-    @patch("scrapers.carrefour.time.sleep")
+    @patch("scrapers.vtex_base.requests.get")
+    @patch("scrapers.vtex_base.time.sleep")
     def test_reintenta_en_429(self, mock_sleep, mock_get):
         """Con 429, el scraper reintenta hasta MAX_RETRIES veces."""
         mock_get.side_effect = [
@@ -95,8 +95,8 @@ class TestCarrefourRateLimit:
         assert len(productos) == 1
         assert productos[0]["nombre"] == "Leche"
 
-    @patch("scrapers.carrefour.requests.get")
-    @patch("scrapers.carrefour.time.sleep")
+    @patch("scrapers.vtex_base.requests.get")
+    @patch("scrapers.vtex_base.time.sleep")
     def test_429_persistente_aborta_categoria(self, mock_sleep, mock_get):
         """Si los MAX_RETRIES intentos fallan por 429, esa categoría se saltea."""
         mock_get.return_value = _mock_response(status=429)
@@ -111,8 +111,8 @@ class TestCarrefourRateLimit:
         # Todos los calls al primer cat_id deben ser reintentos
         assert mock_get.call_count >= MAX_RETRIES
 
-    @patch("scrapers.carrefour.requests.get")
-    @patch("scrapers.carrefour.time.sleep")
+    @patch("scrapers.vtex_base.requests.get")
+    @patch("scrapers.vtex_base.time.sleep")
     def test_429_usa_backoff_exponencial(self, mock_sleep, mock_get):
         """El tiempo de espera debe crecer con cada reintento."""
         mock_get.return_value = _mock_response(status=429)
@@ -133,8 +133,8 @@ class TestCarrefourRateLimit:
 
 class TestCarrefourErroresDeRed:
 
-    @patch("scrapers.carrefour.requests.get")
-    @patch("scrapers.carrefour.time.sleep")
+    @patch("scrapers.vtex_base.requests.get")
+    @patch("scrapers.vtex_base.time.sleep")
     def test_dns_failure_saltea_categoria_y_continua(self, mock_sleep, mock_get):
         """Un error de red en una categoría no debe abortar las siguientes."""
         mock_get.side_effect = [
@@ -151,8 +151,8 @@ class TestCarrefourErroresDeRed:
         assert len(productos) == 1
         assert productos[0]["nombre"] == "Gaseosa"
 
-    @patch("scrapers.carrefour.requests.get")
-    @patch("scrapers.carrefour.time.sleep")
+    @patch("scrapers.vtex_base.requests.get")
+    @patch("scrapers.vtex_base.time.sleep")
     def test_timeout_saltea_categoria(self, mock_sleep, mock_get):
         mock_get.side_effect = requests.exceptions.Timeout()
 
@@ -165,8 +165,8 @@ class TestCarrefourErroresDeRed:
 
 class TestCarrefourParseoProductos:
 
-    @patch("scrapers.carrefour.requests.get")
-    @patch("scrapers.carrefour.time.sleep")
+    @patch("scrapers.vtex_base.requests.get")
+    @patch("scrapers.vtex_base.time.sleep")
     def test_ignora_productos_sin_precio(self, mock_sleep, mock_get):
         sin_precio = {
             "productName": "Producto sin precio",
@@ -184,8 +184,8 @@ class TestCarrefourParseoProductos:
 
         assert productos == []
 
-    @patch("scrapers.carrefour.requests.get")
-    @patch("scrapers.carrefour.time.sleep")
+    @patch("scrapers.vtex_base.requests.get")
+    @patch("scrapers.vtex_base.time.sleep")
     def test_construye_url_absoluta(self, mock_sleep, mock_get):
         mock_get.side_effect = [
             _mock_response(
@@ -201,8 +201,8 @@ class TestCarrefourParseoProductos:
 
         assert productos[0]["url"] == "https://www.carrefour.com.ar/leche-entera/p"
 
-    @patch("scrapers.carrefour.requests.get")
-    @patch("scrapers.carrefour.time.sleep")
+    @patch("scrapers.vtex_base.requests.get")
+    @patch("scrapers.vtex_base.time.sleep")
     def test_limit_respetado(self, mock_sleep, mock_get):
         mock_get.return_value = _mock_response(
             json_data=[_producto_vtex(f"Prod {i}", 100.0) for i in range(50)],
