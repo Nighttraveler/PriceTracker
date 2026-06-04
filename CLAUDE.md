@@ -49,6 +49,12 @@ Para scripts Python que usen `db.py`, pasarlo como variable de entorno:
 DATABASE_URL=postgresql://user:password@localhost:5432/price_tracker python <script>.py
 ```
 
+Para scripts de mantenimiento (`renormalizar_db.py`, `renormalizar_categorias.py`, etc.)
+preferir correrlos dentro del contenedor para usar la red interna de Docker:
+```bash
+docker-compose run --rm scraper python scripts/renormalizar_db.py
+```
+
 ## Arquitectura central
 
 El flujo es: **scraper → normalizer → db → app/reporter**
