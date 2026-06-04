@@ -14,12 +14,12 @@ from normalizer import Normalizer
 
 
 def re_normalizar_db():
-    db = Database(str(Path(__file__).parent.parent / "data" / "precios.db"))
+    db = Database()
     norm = Normalizer(db)
 
-    variantes = db.conn.execute(
+    variantes = db._fetchall(
         "SELECT id, nombre_original, fuente_id, producto_id FROM variantes"
-    ).fetchall()
+    )
 
     print(f"Total variantes a procesar: {len(variantes)}")
     actualizadas = 0
@@ -28,28 +28,29 @@ def re_normalizar_db():
         nuevo_id = norm.obtener_o_crear_producto(v["nombre_original"], v["fuente_id"])
         if nuevo_id != v["producto_id"]:
             print(f"  Redirigiendo '{v['nombre_original']}': producto {v['producto_id']} → {nuevo_id}")
-            db.conn.execute(
+            db._execute(
                 "UPDATE variantes SET producto_id = ? WHERE id = ?",
                 (nuevo_id, v["id"])
             )
             actualizadas += 1
 
-    db.conn.commit()
+    db.commit()
     print(f"\nVariantes redirigidas: {actualizadas}")
 
     # Limpiar productos huérfanos (sin variantes tras las fusiones)
-    huerfanos = db.conn.execute("""
+    huerfanos = db._fetchall("""
         SELECT id, nombre_normalizado FROM productos
         WHERE id NOT IN (SELECT DISTINCT producto_id FROM variantes)
-    """).fetchall()
+    """)
 
     if huerfanos:
         print(f"Productos huérfanos a eliminar: {len(huerfanos)}")
         for p in huerfanos:
             print(f"  Eliminando: {p['nombre_normalizado']}")
-        ids = [p["id"] for p in huerfanos]
-        db.conn.execute(f"DELETE FROM productos WHERE id IN ({','.join('?'*len(ids))})", ids)
-        db.conn.commit()
+        ids = tuple(p["id"] for p in huerfanos)
+        placeholders = ",".join(["?"] * len(ids))
+        db._execute(f"DELETE FROM productos WHERE id IN ({placeholders})", ids)
+        db.commit()
     else:
         print("Sin productos huérfanos.")
 

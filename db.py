@@ -66,6 +66,21 @@ class Database:
         )
         return sql
 
+    def _execute(self, sql: str, params=()):
+        """Ejecuta una sentencia de escritura (INSERT/UPDATE/DELETE)."""
+        self._ensure_conn()
+        sql = self._adapt_sql(sql)
+        if self._pg:
+            with self.conn.cursor() as cur:
+                cur.execute(sql, params or ())
+        else:
+            self.conn.execute(sql, params or ())
+
+    def commit(self):
+        """Commit explícito; no-op en PostgreSQL (autocommit=True)."""
+        if not self._pg:
+            self.conn.commit()
+
     def _fetchall(self, sql: str, params=()):
         self._ensure_conn()
         sql = self._adapt_sql(sql)

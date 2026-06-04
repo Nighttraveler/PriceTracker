@@ -7,11 +7,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from db import Database
 from normalizer import detectar_categoria, es_combo
 
+
 def main():
-    db = Database(str(Path(__file__).parent.parent / "data" / "precios.db"))
-    productos = db.conn.execute(
+    db = Database()
+    productos = db._fetchall(
         "SELECT id, nombre_normalizado, categoria, es_combo FROM productos"
-    ).fetchall()
+    )
 
     print(f"Total productos: {len(productos)}")
     actualizados = 0
@@ -21,15 +22,16 @@ def main():
         nuevo_combo = int(es_combo(p["nombre_normalizado"]))
 
         if nueva_cat != p["categoria"] or nuevo_combo != p["es_combo"]:
-            db.conn.execute(
+            db._execute(
                 "UPDATE productos SET categoria = ?, es_combo = ? WHERE id = ?",
                 (nueva_cat, nuevo_combo, p["id"])
             )
             actualizados += 1
 
-    db.conn.commit()
+    db.commit()
     print(f"Actualizados: {actualizados}")
     print(f"Sin cambios:  {len(productos) - actualizados}")
+
 
 if __name__ == "__main__":
     main()
