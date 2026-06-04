@@ -14,10 +14,9 @@ class Database:
     def __init__(self, path: str = ""):
         db_url = os.environ.get("DATABASE_URL", "")
         if db_url.startswith("postgresql://"):
-            import psycopg2
             self._pg = True
-            self.conn = psycopg2.connect(db_url)
-            self.conn.autocommit = True
+            self._pg_url = db_url
+            self.conn = self._pg_connect()
         else:
             import sqlite3
             self._pg = False
@@ -32,6 +31,21 @@ class Database:
             self.conn.execute("PRAGMA journal_mode=WAL")
 
     # ── Helpers internos ─────────────────────────────────────────────────────
+
+    def _pg_connect(self):
+        import psycopg2
+        conn = psycopg2.connect(self._pg_url)
+        conn.autocommit = True
+        return conn
+
+    def _ensure_conn(self):
+        """Reconecta si la conexión PostgreSQL fue cerrada por el servidor."""
+        if not self._pg:
+            return
+        try:
+            self.conn.cursor().execute("SELECT 1")
+        except Exception:
+            self.conn = self._pg_connect()
 
     def _adapt_sql(self, sql: str) -> str:
         """Convierte SQL SQLite → PostgreSQL (no-op si _pg es False)."""
@@ -53,6 +67,7 @@ class Database:
         return sql
 
     def _fetchall(self, sql: str, params=()):
+        self._ensure_conn()
         sql = self._adapt_sql(sql)
         if self._pg:
             import psycopg2.extras
@@ -62,6 +77,7 @@ class Database:
         return self.conn.execute(sql, params or ()).fetchall()
 
     def _fetchone(self, sql: str, params=()):
+        self._ensure_conn()
         sql = self._adapt_sql(sql)
         if self._pg:
             import psycopg2.extras
@@ -133,6 +149,7 @@ class Database:
         CREATE INDEX IF NOT EXISTS idx_precios_fecha          ON precios(fecha);
         CREATE INDEX IF NOT EXISTS idx_precios_variante       ON precios(variante_id);
         CREATE INDEX IF NOT EXISTS idx_precios_variante_fecha ON precios(variante_id, fecha);
+        CREATE INDEX IF NOT EXISTS idx_precios_fecha_var_id   ON precios(fecha, variante_id, id);
         CREATE INDEX IF NOT EXISTS idx_variantes_producto     ON variantes(producto_id);
         CREATE INDEX IF NOT EXISTS idx_variantes_fuente       ON variantes(fuente_id);
         CREATE INDEX IF NOT EXISTS idx_productos_combo_cat    ON productos(es_combo, categoria);
@@ -519,28 +536,18 @@ class Database:
                 return cur.fetchall()
         return self.conn.execute(sql, producto_ids).fetchall()
 
-    def get_highlights(self, dias: int = 7, min_variacion: float = 5.0,
-                       limit: int = 20, direccion: str = "suba", fuente: str = None):
-        """
-        direccion: "suba" → solo subas, "baja" → solo bajas.
-        fuente: si se especifica, filtra por esa fuente.
+    def get_highlights(self, dias: int = 7, min_variacion: float = 5.0):
+        """Devuelve todos los highlights (todas las fuentes, subas y bajas).
+        El agrupado por fuente y dirección se hace en Python para evitar
+        ejecutar el CTE last_per_day N veces.
         """
         date_fn = "DATE(pr.fecha)" if self._pg else "date(pr.fecha)"
-        dir_filter = "(u.precio - pr_p.precio) > 0" if direccion == "suba" else "(u.precio - pr_p.precio) < 0"
-        dir_order  = "DESC" if direccion == "suba" else "ASC"
-        fuente_filter = "AND f.nombre = ?" if fuente else ""
-        params = [f"-{dias}"]
-        if fuente:
-            params.append(fuente)
-        params.append(min_variacion)
         return self._fetchall(f"""
             WITH last_per_day AS (
                 SELECT MAX(pr.id) as id
                 FROM precios pr
                 JOIN variantes v ON pr.variante_id = v.id
-                JOIN fuentes f ON v.fuente_id = f.id
                 WHERE pr.fecha >= date('now', ? || ' days')
-                {fuente_filter}
                 GROUP BY v.producto_id, v.fuente_id, {date_fn}
             ),
             precios_rango AS (
@@ -564,10 +571,7 @@ class Database:
             WHERE pr_p.precio > 0
               AND ABS((u.precio - pr_p.precio) * 100.0 / pr_p.precio) >= ?
               AND ABS((u.precio - pr_p.precio) * 100.0 / pr_p.precio) <= 1000
-              AND {dir_filter}
-            ORDER BY variacion_pct {dir_order}
-            LIMIT {int(limit)}
-        """, params)
+        """, (f"-{dias}", min_variacion))
 
 
 if __name__ == "__main__":

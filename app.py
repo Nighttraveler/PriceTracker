@@ -70,12 +70,17 @@ def index():
     db = get_db()
     stats = db.stats()
     dias = int(request.args.get("dias", 7))
+    all_highlights = db.get_highlights(dias=dias, min_variacion=5.0)
+    by_fuente = defaultdict(lambda: {"subas": [], "bajas": []})
+    for h in all_highlights:
+        key = "subas" if h["variacion_pct"] > 0 else "bajas"
+        by_fuente[h["fuente"]][key].append(h)
     fuentes = [f["nombre"] for f in stats["fuentes"]]
     highlights_por_fuente = [
         {
             "fuente": f,
-            "subas": db.get_highlights(dias=dias, min_variacion=5.0, limit=10, direccion="suba", fuente=f),
-            "bajas": db.get_highlights(dias=dias, min_variacion=5.0, limit=10, direccion="baja", fuente=f),
+            "subas": sorted(by_fuente[f]["subas"], key=lambda x: x["variacion_pct"], reverse=True)[:10],
+            "bajas": sorted(by_fuente[f]["bajas"], key=lambda x: x["variacion_pct"])[:10],
         }
         for f in fuentes
     ]
