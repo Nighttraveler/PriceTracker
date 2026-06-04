@@ -519,8 +519,14 @@ class Database:
                 return cur.fetchall()
         return self.conn.execute(sql, producto_ids).fetchall()
 
-    def get_highlights(self, dias: int = 7, min_variacion: float = 5.0, limit: int = 50):
+    def get_highlights(self, dias: int = 7, min_variacion: float = 5.0,
+                       limit: int = 20, direccion: str = "suba"):
+        """
+        direccion: "suba" → solo subas (variacion > 0), "baja" → solo bajas (variacion < 0)
+        """
         date_fn = "DATE(pr.fecha)" if self._pg else "date(pr.fecha)"
+        dir_filter = "(u.precio - pr_p.precio) > 0" if direccion == "suba" else "(u.precio - pr_p.precio) < 0"
+        dir_order  = "DESC" if direccion == "suba" else "ASC"
         return self._fetchall(f"""
             WITH last_per_day AS (
                 SELECT MAX(pr.id) as id
@@ -550,7 +556,8 @@ class Database:
             WHERE pr_p.precio > 0
               AND ABS((u.precio - pr_p.precio) * 100.0 / pr_p.precio) >= ?
               AND ABS((u.precio - pr_p.precio) * 100.0 / pr_p.precio) <= 1000
-            ORDER BY ABS((u.precio - pr_p.precio) * 100.0 / pr_p.precio) DESC
+              AND {dir_filter}
+            ORDER BY variacion_pct {dir_order}
             LIMIT {int(limit)}
         """, (f"-{dias}", min_variacion))
 

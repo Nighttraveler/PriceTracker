@@ -70,16 +70,8 @@ def index():
     db = get_db()
     stats = db.stats()
     dias = int(request.args.get("dias", 7))
-    highlights = db.get_highlights(dias=dias, min_variacion=5.0)
-    highlights_subas = sorted(
-        [h for h in highlights if h["variacion_pct"] > 0],
-        key=lambda h: h["variacion_pct"],
-        reverse=True,
-    )
-    highlights_bajas = sorted(
-        [h for h in highlights if h["variacion_pct"] < 0],
-        key=lambda h: h["variacion_pct"],
-    )
+    highlights_subas = db.get_highlights(dias=dias, min_variacion=5.0, limit=20, direccion="suba")
+    highlights_bajas = db.get_highlights(dias=dias, min_variacion=5.0, limit=20, direccion="baja")
     return render_template(
         "index.html",
         stats=stats,
