@@ -41,7 +41,7 @@
 </div>
 
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-  <h5 class="mb-0">Highlights</h5>
+  <h5 class="mb-0">Highlights por fuente</h5>
   <div class="btn-group btn-group-sm">
     {% for d in [7, 14, 30] %}
       <a href="/?dias={{ d }}" class="btn btn-outline-secondary {% if dias == d %}active{% endif %}">{{ d }} días</a>
@@ -49,26 +49,26 @@
   </div>
 </div>
 
-<div class="row g-3 mb-4">
+{% for bloque in highlights_por_fuente %}
+{% set f = bloque.fuente %}
+{% if bloque.subas or bloque.bajas %}
+<h6 class="mt-3 mb-2"><span class="fuente-chip fuente-{{ f }}">{{ f }}</span></h6>
+<div class="row g-3 mb-3">
 
-  {# Subas #}
   <div class="col-12 col-md-6">
     <div class="card h-100">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <strong class="text-danger">▲ Subas del período</strong>
-        <span class="badge bg-danger">{{ n_subas }}</span>
+      <div class="card-header d-flex justify-content-between align-items-center py-2">
+        <strong class="text-danger">▲ Subas</strong>
+        <span class="badge bg-danger">{{ bloque.subas | length }}</span>
       </div>
-      {% if highlights_subas %}
+      {% if bloque.subas %}
       <div class="table-responsive">
       <table class="table table-hover table-sm mb-0">
-        <thead>
-          <tr><th>Producto</th><th>Fuente</th><th>Precio actual</th><th>Variación</th></tr>
-        </thead>
+        <thead><tr><th>Producto</th><th>Precio actual</th><th>Variación</th></tr></thead>
         <tbody>
-          {% for h in highlights_subas %}
+          {% for h in bloque.subas %}
           <tr>
             <td><a href="/producto/{{ h['id'] }}" class="text-decoration-none">{{ h['nombre_normalizado'] }}</a></td>
-            <td><span class="fuente-chip fuente-{{ h['fuente'] }}">{{ h['fuente'] }}</span></td>
             <td>$ {{ "%.2f"|format(h['precio_actual']) }}</td>
             <td><span class="badge-up">▲ {{ h['variacion_pct'] }}%</span></td>
           </tr>
@@ -77,29 +77,25 @@
       </table>
       </div>
       {% else %}
-      <div class="card-body text-muted">Sin subas mayores al 5% en los últimos {{ dias }} días.</div>
+      <div class="card-body text-muted small">Sin subas mayores al 5%.</div>
       {% endif %}
     </div>
   </div>
 
-  {# Bajas #}
   <div class="col-12 col-md-6">
     <div class="card h-100">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <strong class="text-success">▼ Bajas del período</strong>
-        <span class="badge bg-success">{{ n_bajas }}</span>
+      <div class="card-header d-flex justify-content-between align-items-center py-2">
+        <strong class="text-success">▼ Bajas</strong>
+        <span class="badge bg-success">{{ bloque.bajas | length }}</span>
       </div>
-      {% if highlights_bajas %}
+      {% if bloque.bajas %}
       <div class="table-responsive">
       <table class="table table-hover table-sm mb-0">
-        <thead>
-          <tr><th>Producto</th><th>Fuente</th><th>Precio actual</th><th>Variación</th></tr>
-        </thead>
+        <thead><tr><th>Producto</th><th>Precio actual</th><th>Variación</th></tr></thead>
         <tbody>
-          {% for h in highlights_bajas %}
+          {% for h in bloque.bajas %}
           <tr>
             <td><a href="/producto/{{ h['id'] }}" class="text-decoration-none">{{ h['nombre_normalizado'] }}</a></td>
-            <td><span class="fuente-chip fuente-{{ h['fuente'] }}">{{ h['fuente'] }}</span></td>
             <td>$ {{ "%.2f"|format(h['precio_actual']) }}</td>
             <td><span class="badge-down">▼ {{ h['variacion_pct']|abs }}%</span></td>
           </tr>
@@ -108,12 +104,14 @@
       </table>
       </div>
       {% else %}
-      <div class="card-body text-muted">Sin bajas mayores al 5% en los últimos {{ dias }} días.</div>
+      <div class="card-body text-muted small">Sin bajas mayores al 5%.</div>
       {% endif %}
     </div>
   </div>
 
 </div>
+{% endif %}
+{% endfor %}
 
 <div class="card">
   <div class="card-body">

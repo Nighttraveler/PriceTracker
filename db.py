@@ -520,19 +520,27 @@ class Database:
         return self.conn.execute(sql, producto_ids).fetchall()
 
     def get_highlights(self, dias: int = 7, min_variacion: float = 5.0,
-                       limit: int = 20, direccion: str = "suba"):
+                       limit: int = 20, direccion: str = "suba", fuente: str = None):
         """
-        direccion: "suba" → solo subas (variacion > 0), "baja" → solo bajas (variacion < 0)
+        direccion: "suba" → solo subas, "baja" → solo bajas.
+        fuente: si se especifica, filtra por esa fuente.
         """
         date_fn = "DATE(pr.fecha)" if self._pg else "date(pr.fecha)"
         dir_filter = "(u.precio - pr_p.precio) > 0" if direccion == "suba" else "(u.precio - pr_p.precio) < 0"
         dir_order  = "DESC" if direccion == "suba" else "ASC"
+        fuente_filter = "AND f.nombre = ?" if fuente else ""
+        params = [f"-{dias}"]
+        if fuente:
+            params.append(fuente)
+        params.append(min_variacion)
         return self._fetchall(f"""
             WITH last_per_day AS (
                 SELECT MAX(pr.id) as id
                 FROM precios pr
                 JOIN variantes v ON pr.variante_id = v.id
+                JOIN fuentes f ON v.fuente_id = f.id
                 WHERE pr.fecha >= date('now', ? || ' days')
+                {fuente_filter}
                 GROUP BY v.producto_id, v.fuente_id, {date_fn}
             ),
             precios_rango AS (
@@ -559,7 +567,7 @@ class Database:
               AND {dir_filter}
             ORDER BY variacion_pct {dir_order}
             LIMIT {int(limit)}
-        """, (f"-{dias}", min_variacion))
+        """, params)
 
 
 if __name__ == "__main__":

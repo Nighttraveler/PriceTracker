@@ -70,15 +70,19 @@ def index():
     db = get_db()
     stats = db.stats()
     dias = int(request.args.get("dias", 7))
-    highlights_subas = db.get_highlights(dias=dias, min_variacion=5.0, limit=20, direccion="suba")
-    highlights_bajas = db.get_highlights(dias=dias, min_variacion=5.0, limit=20, direccion="baja")
+    fuentes = [f["nombre"] for f in stats["fuentes"]]
+    highlights_por_fuente = [
+        {
+            "fuente": f,
+            "subas": db.get_highlights(dias=dias, min_variacion=5.0, limit=10, direccion="suba", fuente=f),
+            "bajas": db.get_highlights(dias=dias, min_variacion=5.0, limit=10, direccion="baja", fuente=f),
+        }
+        for f in fuentes
+    ]
     return render_template(
         "index.html",
         stats=stats,
-        highlights_subas=highlights_subas,
-        highlights_bajas=highlights_bajas,
-        n_subas=len(highlights_subas),
-        n_bajas=len(highlights_bajas),
+        highlights_por_fuente=highlights_por_fuente,
         dias=dias,
     )
 
