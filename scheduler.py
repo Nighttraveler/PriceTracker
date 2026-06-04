@@ -68,7 +68,7 @@ if __name__ == "__main__":
              f"reporte los {args.report_day}")
 
     # Ejecutar una vez al arrancar
-    run_scraping()
+    #run_scraping()
 
     while True:
         schedule.run_pending()

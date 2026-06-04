@@ -1,4 +1,4 @@
-.PHONY: up down migrate run test psql help
+.PHONY: up down restart build migrate run test psql help
 
 # Variables
 PYTHON := ./venv/bin/python
@@ -14,6 +14,12 @@ up: ## Start containers in background
 
 down: ## Stop containers
 	$(DOCKER_COMPOSE) down
+
+build: ## Build (or rebuild) Docker images
+	$(DOCKER_COMPOSE) build
+
+restart: down build ## Rebuild images and restart all containers
+	$(DOCKER_COMPOSE) up -d
 
 migrate: ## Migrate SQLite data to PostgreSQL
 	$(PYTHON) scripts/migrate_sqlite_to_postgres.py
