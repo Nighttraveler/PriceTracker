@@ -1,4 +1,4 @@
-.PHONY: up down restart build migrate run test psql help
+.PHONY: up down restart build migrate run test psql chequear-urls renormalizar-categorias renormalizar-db help
 
 # Variables
 PYTHON := ./venv/bin/python
@@ -36,3 +36,15 @@ psql: ## Open a psql shell to the PostgreSQL container (use Q="..." for one-off 
 	else \
 		$(DOCKER_COMPOSE) exec -it db psql -U user price_tracker; \
 	fi
+
+chequear-urls: ## Check for discontinued URLs (use FUENTE=anonima LIMIT=50 DRY_RUN=1 for options)
+	$(DOCKER_COMPOSE) run --rm scraper python scripts/chequear_urls.py \
+		$(if $(FUENTE),--fuente $(FUENTE)) \
+		$(if $(LIMIT),--limit $(LIMIT)) \
+		$(if $(DRY_RUN),--dry-run)
+
+renormalizar-categorias: ## Re-run category detection after changing rules in normalizer.py
+	$(DOCKER_COMPOSE) run --rm scraper python scripts/renormalizar_categorias.py
+
+renormalizar-db: ## Re-run fuzzy matching after changing threshold or _normalizar_para_match()
+	$(DOCKER_COMPOSE) run --rm scraper python scripts/renormalizar_db.py
