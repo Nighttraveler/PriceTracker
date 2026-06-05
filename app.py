@@ -6,10 +6,14 @@ from collections import defaultdict
 from pathlib import Path
 
 from flask import Flask, render_template, request, abort, jsonify
+from flask_caching import Cache
 
 from db import Database
 
 app = Flask(__name__)
+
+CACHE_TTL = int(os.environ.get("CACHE_TTL", 4 * 3600))
+cache = Cache(app, config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": CACHE_TTL})
 
 
 def _compute_carrito_optimo(rows):
@@ -66,6 +70,7 @@ def get_db() -> Database:
 
 
 @app.route("/")
+@cache.cached(timeout=CACHE_TTL, query_string=True)
 def index():
     db = get_db()
     stats = db.stats()
@@ -95,6 +100,7 @@ def index():
 PER_PAGE = 50
 
 @app.route("/precios")
+@cache.cached(timeout=CACHE_TTL, query_string=True)
 def precios():
     db = get_db()
     dias = int(request.args.get("dias", 7))
@@ -211,6 +217,7 @@ def producto(producto_id):
 
 
 @app.route("/ahorro")
+@cache.cached(timeout=CACHE_TTL)
 def ahorro():
     db = get_db()
     filas_cat = db.get_ahorro_por_categoria()
@@ -252,6 +259,7 @@ def ahorro():
 
 
 @app.route("/buscar")
+@cache.cached(timeout=CACHE_TTL // 2, query_string=True)
 def buscar():
     db = get_db()
     q = request.args.get("q", "").strip()
@@ -346,6 +354,12 @@ def api_carrito():
         "fuentes": fuentes,
         "no_encontrados": no_encontrados,
     })
+
+
+@app.route("/admin/cache/clear", methods=["POST"])
+def clear_cache():
+    cache.clear()
+    return jsonify({"ok": True, "message": "Caché limpiado"})
 
 
 if __name__ == "__main__":
