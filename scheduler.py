@@ -35,6 +35,12 @@ def run_reporte():
     log.info(f"Reporte guardado en {output}")
 
 
+def run_chequeo_urls():
+    log.info("▶ Verificando URLs descatalogadas...")
+    from scripts.chequear_urls import main as chequear
+    chequear([])
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Hermes Scheduler")
     parser.add_argument("--hour", type=int, default=7,
@@ -42,6 +48,9 @@ if __name__ == "__main__":
     parser.add_argument("--report-day", default="lunes",
                         choices=list(DIAS_ES.keys()),
                         help="Día de la semana para el reporte semanal")
+    parser.add_argument("--check-day", default="domingo",
+                        choices=list(DIAS_ES.keys()),
+                        help="Día de la semana para verificar URLs descatalogadas (default: domingo)")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -64,8 +73,15 @@ if __name__ == "__main__":
     dia_en = DIAS_ES[args.report_day]
     getattr(schedule.every(), dia_en).at(hora_str).do(run_reporte)
 
-    log.info(f"Scheduler iniciado — scraping lun/mié/vie a las {hora_str}, "
-             f"reporte los {args.report_day}")
+    # Verificación de URLs descatalogadas (semanal)
+    check_day_en = DIAS_ES[args.check_day]
+    getattr(schedule.every(), check_day_en).at(hora_str).do(run_chequeo_urls)
+
+    log.info(
+        f"Scheduler iniciado — scraping lun/mié/vie a las {hora_str}, "
+        f"reporte los {args.report_day}, "
+        f"chequeo de URLs los {args.check_day}"
+    )
 
     # Ejecutar una vez al arrancar
     #run_scraping()

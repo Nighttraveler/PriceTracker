@@ -150,6 +150,7 @@ class Database:
             fuente_id INTEGER REFERENCES fuentes(id),
             nombre_original TEXT NOT NULL,
             url_producto TEXT,
+            descatalogado INTEGER NOT NULL DEFAULT 0,
             UNIQUE(fuente_id, nombre_original)
         );
 

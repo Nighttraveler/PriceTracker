@@ -133,6 +133,27 @@ El matching usa `fuzz.token_sort_ratio` con umbral 98. Antes de comparar, ambos 
 
 Sin esto, "Acondicionador Dove Vitamina A+E 400ml" y "Acondicionador con Vitamina A y E Dove x 400 cc" obtenían score 88 (< umbral 98) y se guardaban como productos distintos.
 
+## Migraciones de schema — Alembic
+
+El proyecto usa **Alembic** para migraciones incrementales de schema. Las migraciones viven en `alembic/versions/`.
+
+```bash
+# Ver estado actual
+DATABASE_URL=postgresql://... alembic current
+
+# Aplicar todas las migraciones pendientes
+DATABASE_URL=postgresql://... alembic upgrade head
+
+# Crear una nueva migración (siempre manual, no autogenerate — no hay modelos ORM)
+DATABASE_URL=postgresql://... alembic revision -m "descripcion_del_cambio"
+# Luego editar alembic/versions/<hash>_descripcion.py con upgrade() y downgrade()
+
+# Revertir la última migración
+DATABASE_URL=postgresql://... alembic downgrade -1
+```
+
+**Regla:** toda modificación al schema (ADD COLUMN, CREATE INDEX, DROP COLUMN, etc.) debe hacerse como migración Alembic, no manualmente ni en `init_schema()`. El `_DDL` en `db.py` se actualiza en paralelo para que installs nuevas ya incluyan la columna.
+
 ## Scripts de mantenimiento
 
 Todos deben correrse desde la raíz del proyecto con el virtualenv activo.
@@ -144,6 +165,10 @@ python scripts/renormalizar_categorias.py
 # Después de cambiar lógica de fuzzy matching (UMBRAL, _normalizar_para_match):
 # Re-corre el matching para todas las variantes; fusiona duplicados y limpia huérfanos.
 python scripts/renormalizar_db.py
+
+# Verificar URLs descatalogadas (301/404/410) y marcarlas en DB:
+DATABASE_URL=postgresql://... python scripts/chequear_urls.py
+DATABASE_URL=postgresql://... python scripts/chequear_urls.py --fuente anonima --limit 50 --dry-run
 
 # Migraciones one-time (ya aplicadas):
 python scripts/migrar_fechas.py          # TEXT → TIMESTAMP en columna fecha
