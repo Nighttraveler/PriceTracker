@@ -20,6 +20,22 @@ services:
       - ./data:/app/data
     depends_on:
       - db
+    networks:
+      - default
+      - proxy # referencia a la red creada en el compose de traefik/pihole
+    labels:
+      - "traefik.enable=true"
+      # HTTP
+      - "traefik.http.routers.pricetracker.rule=Host(`pricetracker.home.arpa`)"
+      - "traefik.http.routers.pricetracker.entrypoints=web"
+      - "traefik.http.routers.pricetracker.service=pricetracker"
+      # HTTPS
+      - "traefik.http.routers.pricetracker-secure.rule=Host(`pricetracker.home.arpa`)"
+      - "traefik.http.routers.pricetracker-secure.entrypoints=websecure"
+      - "traefik.http.routers.pricetracker-secure.tls=true"
+      - "traefik.http.routers.pricetracker-secure.service=pricetracker"
+      # Service
+      - "traefik.http.services.pricetracker.loadbalancer.server.port=5000"
 
   scraper:
     build: .
@@ -32,3 +48,8 @@ services:
       - db
     restart: unless-stopped
     command: python scheduler.py
+
+
+networks:
+  proxy:
+    external: true
