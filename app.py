@@ -53,6 +53,7 @@ def _compute_carrito_optimo(rows):
 
     carrito = []
     for fuente, items in sorted(por_fuente.items()):
+        items.sort(key=lambda i: i["precio"])
         carrito.append({
             "fuente": fuente,
             "productos": items,
@@ -309,6 +310,7 @@ def api_buscar_carrito():
 
     db = get_db()
     todos = db.buscar_productos(q=q, max_productos=200)
+    todos.sort(key=lambda p: min(f["precio"] for f in p["fuentes"].values()) if p["fuentes"] else float("inf"))
 
     total = len(todos)
     total_pages = max(1, (total + per_page - 1) // per_page)
