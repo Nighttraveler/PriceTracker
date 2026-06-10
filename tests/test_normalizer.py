@@ -170,6 +170,19 @@ class TestDetectarCategoria:
     def test_almacen_endulzante(self):
         assert detectar_categoria("endulzante stevia hileret x 200 g") == "almacen"
 
+    def test_almacen_sopa_con_hierba(self):
+        # "romero" en el nombre no debe ganar sobre "sopa" — almacen va antes que condimentos
+        assert detectar_categoria("sopa de zapallo romero quick knorr x 63 g") == "almacen"
+        assert detectar_categoria("sopa instantanea knorr quick zapallo romero 5 sobres") == "almacen"
+
+    def test_mascotas_cat_chow(self):
+        # Cat Chow no tiene "para gato" — se detecta por la palabra "cat"
+        assert detectar_categoria("adulto pescado pollo cat chow 1 kg") == "mascotas"
+
+    def test_mascotas_gatitos(self):
+        # "para gatitos" no matchea "para gato" (substring) — se detecta por "gatito" (prefix)
+        assert detectar_categoria("alimento humedo para gatitos cat chow 85 g pollo") == "mascotas"
+
     def test_lacteos_con_multiword(self):
         # "dulce de leche" era multi-word y no matcheaba antes
         assert detectar_categoria("dulce de leche la serenisima x 400 g") == "lacteos"

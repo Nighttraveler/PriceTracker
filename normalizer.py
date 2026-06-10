@@ -70,6 +70,21 @@ CATEGORIAS = {
         "toallita",
     ],
 
+    # ── Almacén — antes de condimentos para que "sopa de ... romero" no quede
+    # en condimentos por el keyword de hierba ────────────────────────────────────
+    "almacen": [
+        "arroz", "fideo", "harina", "azucar", "aceite", "sal",
+        "vinagre", "polenta", "lenteja", "garbanzo", "poroto",
+        "atun", "yerba", "avena", "granola", "caldo",
+        "endulzante", "edulcorante", "stevia", "maizena",
+        "fecula", "levadura", "premezcla", "rebozador",
+        "tapas para", "tapas de empanada",
+        "aceite de oliva", "aceite de girasol",
+        "gelatina", "gelatina en polvo",
+        "pan rallado",
+        "sopa",
+    ],
+
     # ── Condimentos y salsas ────────────────────────────────────────────────────
     "condimentos": [
         "mayonesa", "ketchup", "mostaza", "aderezo", "aceto",
@@ -92,20 +107,6 @@ CATEGORIAS = {
         "postre", "flan", "mousse",
     ],
 
-    # ── Almacén ─────────────────────────────────────────────────────────────────
-    "almacen": [
-        "arroz", "fideo", "harina", "azucar", "aceite", "sal",
-        "vinagre", "polenta", "lenteja", "garbanzo", "poroto",
-        "atun", "yerba", "avena", "granola", "caldo",
-        "endulzante", "edulcorante", "stevia", "maizena",
-        "fecula", "levadura", "premezcla", "rebozador",
-        "tapas para", "tapas de empanada",
-        "aceite de oliva", "aceite de girasol",
-        "gelatina", "gelatina en polvo",
-        "pan rallado",
-        "sopa",
-    ],
-
     # ── Congelados — medallones son siempre congelados (carne, veganos, quinoa) ─
     "congelados": [
         "helado", "empanada", "pizza", "hamburguesa",
@@ -120,6 +121,8 @@ CATEGORIAS = {
         "para perro", "para gato",
         "antipulgas", "antiparasitario",
         "arena para",
+        "gatito",
+        "cat",
     ],
 
     # ── Panificados — antes de carnes para que "baguetin sabor jamón" sea pan ──
