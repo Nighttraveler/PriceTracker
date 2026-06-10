@@ -4,6 +4,7 @@
 import os
 from collections import defaultdict
 from pathlib import Path
+from urllib.parse import urlencode
 
 from flask import Flask, render_template, request, abort, jsonify
 from flask_caching import Cache
@@ -85,8 +86,8 @@ def index():
     highlights_por_fuente = [
         {
             "fuente": f,
-            "subas": sorted(by_fuente[f]["subas"], key=lambda x: x["variacion_pct"], reverse=True)[:10],
-            "bajas": sorted(by_fuente[f]["bajas"], key=lambda x: x["variacion_pct"])[:10],
+            "subas": sorted(by_fuente[f]["subas"], key=lambda x: x["variacion_pct"], reverse=True)[:50],
+            "bajas": sorted(by_fuente[f]["bajas"], key=lambda x: x["variacion_pct"])[:50],
         }
         for f in fuentes
     ]
@@ -266,20 +267,29 @@ def buscar():
     q = request.args.get("q", "").strip()
     fuentes_sel = request.args.getlist("fuente")
     cats_sel = request.args.getlist("cat")
+    page = max(1, int(request.args.get("page", 1)))
 
     all_fuentes = db.get_all_fuentes()
     all_cats = db.get_all_categorias()
 
-    resultados = []
+    todos = []
     buscado = bool(q or fuentes_sel or cats_sel)
     if buscado:
-        resultados = db.buscar_productos(
+        todos = db.buscar_productos(
             q=q,
             fuentes=fuentes_sel or None,
             categorias=cats_sel or None,
+            max_productos=500,
         )
 
-    fuentes_cols = sorted({f for p in resultados for f in p["fuentes"]})
+    total = len(todos)
+    total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
+    page = min(page, total_pages)
+    resultados = todos[(page - 1) * PER_PAGE: page * PER_PAGE]
+
+    fuentes_cols = sorted({f for p in todos for f in p["fuentes"]})
+    params = [("q", q)] + [("fuente", f) for f in fuentes_sel] + [("cat", c) for c in cats_sel]
+    base_url = "/buscar?" + urlencode(params) + "&page="
 
     return render_template(
         "buscar.html",
@@ -291,6 +301,11 @@ def buscar():
         resultados=resultados,
         fuentes_cols=fuentes_cols,
         buscado=buscado,
+        page=page,
+        total_pages=total_pages,
+        total=total,
+        per_page=PER_PAGE,
+        base_url=base_url,
     )
 
 

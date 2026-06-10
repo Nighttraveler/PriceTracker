@@ -46,8 +46,14 @@
 {% block content %}
 <div class="d-flex align-items-center justify-content-between mb-3">
   <h4 class="mb-0">Buscar productos</h4>
-  {% if buscado %}
-  <span class="text-muted" style="font-size:0.85rem">{{ resultados | length }} resultado{{ 's' if resultados | length != 1 else '' }}</span>
+  {% if buscado and total > 0 %}
+  <span class="text-muted" style="font-size:0.85rem">
+    {% if total_pages > 1 %}
+      {{ (page - 1) * per_page + 1 }}–{{ (page - 1) * per_page + (resultados | length) }} de {{ total }} resultado{{ 's' if total != 1 else '' }}
+    {% else %}
+      {{ total }} resultado{{ 's' if total != 1 else '' }}
+    {% endif %}
+  </span>
   {% endif %}
 </div>
 
@@ -182,9 +188,31 @@
     </tbody>
   </table>
   </div>
-  {% if resultados | length == 300 %}
-  <div class="card-footer text-muted text-center" style="font-size:0.8rem">
-    Mostrando los primeros 300 resultados — refiná la búsqueda para ver más.
+  {% if total_pages > 1 %}
+  <div class="card-footer py-2">
+    <nav class="d-flex justify-content-center">
+      <ul class="pagination pagination-sm mb-0">
+        <li class="page-item {% if page == 1 %}disabled{% endif %}">
+          <a class="page-link" href="{{ base_url }}1">«</a>
+        </li>
+        <li class="page-item {% if page == 1 %}disabled{% endif %}">
+          <a class="page-link" href="{{ base_url ~ (page - 1) }}">‹</a>
+        </li>
+        {% set start = [1, page - 2] | max %}
+        {% set end = [total_pages, page + 2] | min %}
+        {% for p in range(start, end + 1) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+          <a class="page-link" href="{{ base_url ~ p }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+        <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+          <a class="page-link" href="{{ base_url ~ (page + 1) }}">›</a>
+        </li>
+        <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+          <a class="page-link" href="{{ base_url ~ total_pages }}">»</a>
+        </li>
+      </ul>
+    </nav>
   </div>
   {% endif %}
 </div>

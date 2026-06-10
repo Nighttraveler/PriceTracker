@@ -67,7 +67,7 @@
         <thead><tr><th>Producto</th><th>Precio actual</th><th>Variación</th></tr></thead>
         <tbody>
           {% for h in bloque.subas %}
-          <tr>
+          <tr{% if loop.index > 20 %} class="hl-extra d-none" data-sec="{{ f }}-subas"{% endif %}>
             <td><a href="/producto/{{ h['id'] }}" class="text-decoration-none">{{ h['nombre_normalizado'] }}</a></td>
             <td>$ {{ "%.2f"|format(h['precio_actual']) }}</td>
             <td><span class="badge-up">▲ {{ h['variacion_pct'] }}%</span></td>
@@ -76,6 +76,11 @@
         </tbody>
       </table>
       </div>
+      {% if bloque.subas | length > 20 %}
+      <div class="card-footer text-center py-1">
+        <button class="btn btn-link btn-sm hl-toggle" data-sec="{{ f }}-subas" data-extra="{{ bloque.subas | length - 20 }}">Ver {{ bloque.subas | length - 20 }} más ▼</button>
+      </div>
+      {% endif %}
       {% else %}
       <div class="card-body text-muted small">Sin subas mayores al 5%.</div>
       {% endif %}
@@ -94,7 +99,7 @@
         <thead><tr><th>Producto</th><th>Precio actual</th><th>Variación</th></tr></thead>
         <tbody>
           {% for h in bloque.bajas %}
-          <tr>
+          <tr{% if loop.index > 20 %} class="hl-extra d-none" data-sec="{{ f }}-bajas"{% endif %}>
             <td><a href="/producto/{{ h['id'] }}" class="text-decoration-none">{{ h['nombre_normalizado'] }}</a></td>
             <td>$ {{ "%.2f"|format(h['precio_actual']) }}</td>
             <td><span class="badge-down">▼ {{ h['variacion_pct']|abs }}%</span></td>
@@ -103,6 +108,11 @@
         </tbody>
       </table>
       </div>
+      {% if bloque.bajas | length > 20 %}
+      <div class="card-footer text-center py-1">
+        <button class="btn btn-link btn-sm hl-toggle" data-sec="{{ f }}-bajas" data-extra="{{ bloque.bajas | length - 20 }}">Ver {{ bloque.bajas | length - 20 }} más ▼</button>
+      </div>
+      {% endif %}
       {% else %}
       <div class="card-body text-muted small">Sin bajas mayores al 5%.</div>
       {% endif %}
@@ -123,4 +133,19 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.querySelectorAll('.hl-toggle').forEach(btn => {
+  btn.addEventListener('click', function () {
+    const sec = this.dataset.sec;
+    const extra = this.dataset.extra;
+    const rows = document.querySelectorAll(`tr[data-sec="${sec}"]`);
+    const expanding = rows[0].classList.contains('d-none');
+    rows.forEach(r => r.classList.toggle('d-none'));
+    this.textContent = expanding ? 'Ver menos ▲' : `Ver ${extra} más ▼`;
+  });
+});
+</script>
 {% endblock %}
