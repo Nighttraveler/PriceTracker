@@ -172,7 +172,7 @@ CATEGORIAS = {
 }
 
 
-STOPWORDS_MATCH = frozenset({"con", "y", "x"})
+STOPWORDS_MATCH = frozenset({"con", "y", "x", "edicion"})
 
 
 def limpiar(nombre: str) -> str:
@@ -191,11 +191,16 @@ def _normalizar_para_match(nombre_limpio: str) -> str:
     - cc → ml  (1 cc = 1 ml, distintas fuentes usan ambas)
     - grs → g
     - "400 ml" → "400ml"  (unifica en un solo token)
-    - quita conectores ("con", "y", "x") que son ruido puro
+    - Ng → Nml  (g y ml son intercambiables para líquidos; el guard de números distintos
+                 evita fusionar 400ml con 200ml)
+    - años 20XX → eliminados (marketing de edición, no distinguen el producto)
+    - quita conectores ("con", "y", "x", "edicion") que son ruido puro
     """
     nombre = re.sub(r'\bcc\b', 'ml', nombre_limpio)
     nombre = re.sub(r'\bgrs\b', 'g', nombre)
     nombre = re.sub(r'(\d+)\s+(ml|g|kg|lt|l)\b', r'\1\2', nombre)
+    nombre = re.sub(r'(\d+)g\b', r'\1ml', nombre)
+    nombre = re.sub(r'\b20\d{2}\b', '', nombre)
     palabras = [p for p in nombre.split() if p not in STOPWORDS_MATCH]
     return ' '.join(palabras)
 
@@ -264,15 +269,15 @@ class Normalizer:
         productos = self.db.get_all_productos()
         mejor_score = 0
         mejor_id = None
-        numeros_actuales = extraer_numeros(nombre_limpio)
         nombre_match = _normalizar_para_match(nombre_limpio)
+        numeros_actuales = extraer_numeros(nombre_match)
 
         for prod in productos:
-            numeros_prod = extraer_numeros(prod["nombre_normalizado"])
+            prod_match = _normalizar_para_match(prod["nombre_normalizado"])
+            numeros_prod = extraer_numeros(prod_match)
             if numeros_actuales and numeros_prod and set(numeros_actuales) != set(numeros_prod):
                 score = 0
             else:
-                prod_match = _normalizar_para_match(prod["nombre_normalizado"])
                 score = fuzz.token_sort_ratio(nombre_match, prod_match)
 
             if score > mejor_score:

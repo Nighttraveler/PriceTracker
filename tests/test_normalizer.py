@@ -242,15 +242,22 @@ class TestNormalizarParaMatch:
     def test_numero_y_unidad_se_unen(self):
         # "400 ml" → "400ml" para que token_sort_ratio los trate como un solo token
         assert _normalizar_para_match(limpiar("jugo 500 ml")) == "jugo 500ml"
-        assert _normalizar_para_match(limpiar("aceite 900 g")) == "aceite 900g"
+        # g se convierte a ml para equiparar notaciones distintas entre fuentes
+        assert _normalizar_para_match(limpiar("aceite 900 g")) == "aceite 900ml"
 
-    def test_grs_se_convierte_a_g(self):
-        assert _normalizar_para_match(limpiar("arroz 500 grs")) == "arroz 500g"
+    def test_grs_se_convierte_a_g_luego_a_ml(self):
+        # grs → g → ml: normalización en cadena para comparación
+        assert _normalizar_para_match(limpiar("arroz 500 grs")) == "arroz 500ml"
 
     def test_stopwords_removidos(self):
         assert _normalizar_para_match("leche con vitaminas") == "leche vitaminas"
         assert _normalizar_para_match("vitamina a y e") == "vitamina a e"
         assert _normalizar_para_match("aceite x 500ml") == "aceite 500ml"
+        assert _normalizar_para_match("fernet edicion mundial 750ml") == "fernet mundial 750ml"
+
+    def test_anio_marketing_se_elimina(self):
+        # Años tipo "2026" en nombres de edición especial no distinguen el producto
+        assert _normalizar_para_match(limpiar("fernet branca mundial 2026 750 ml")) == "fernet branca mundial 750ml"
 
     def test_no_afecta_nombres_sin_conectores(self):
         limpio = limpiar("Acondicionador Dove Hidratacion Vitamina A E 400ml")
@@ -264,6 +271,23 @@ class TestNormalizarParaMatch:
         assert fuzz.token_sort_ratio(m1, m2) >= 98, (
             f"Score {fuzz.token_sort_ratio(m1, m2):.1f} insuficiente.\n  m1={m1}\n  m2={m2}"
         )
+
+    def test_caso_real_fernet_edicion_mundial(self):
+        """Tres variantes del mismo fernet edición mundial deben normalizar al mismo producto."""
+        from rapidfuzz import fuzz
+        nombres = [
+            "fernet branca edicion mundial 750 ml",
+            "fernet branca mundial 2026 750 ml",
+            "fernet edicion mundial branca x 750g",
+        ]
+        normalizados = [_normalizar_para_match(limpiar(n)) for n in nombres]
+        for i in range(len(normalizados)):
+            for j in range(i + 1, len(normalizados)):
+                score = fuzz.token_sort_ratio(normalizados[i], normalizados[j])
+                assert score >= 98, (
+                    f"Score {score:.1f} entre variante {i+1} y {j+1} insuficiente.\n"
+                    f"  m{i+1}={normalizados[i]}\n  m{j+1}={normalizados[j]}"
+                )
 
     def test_diferente_tamanio_no_matchea(self):
         """400ml y 200ml deben seguir siendo distintos tras la normalización."""
@@ -333,6 +357,21 @@ class TestNormalizerClass:
         assert resultado == 1, (
             "Mismo producto descrito distinto por dos fuentes debe mapearse al mismo ID"
         )
+        self.mock_db.insert_producto.assert_not_called()
+
+    def test_fusiona_fernet_edicion_mundial_variantes(self):
+        """Fernet Branca Edición Mundial 750ml aparece con distintos nombres según la fuente."""
+        self.mock_db.get_all_productos.return_value = [
+            {"id": 9957, "nombre_normalizado": "fernet branca edicion mundial 750 ml"}
+        ]
+        for nombre in [
+            "fernet branca mundial 2026 750 ml",
+            "fernet edicion mundial branca x 750g",
+        ]:
+            resultado = self.normalizer.obtener_o_crear_producto(nombre, fuente_id=2)
+            assert resultado == 9957, (
+                f"'{nombre}' debe mapearse al mismo producto (id 9957), no crear uno nuevo"
+            )
         self.mock_db.insert_producto.assert_not_called()
 
     def test_no_fusiona_mismo_producto_diferente_tamanio(self):
