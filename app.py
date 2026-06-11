@@ -10,6 +10,7 @@ from flask import Flask, render_template, request, abort, jsonify
 from flask_caching import Cache
 
 from db import Database
+from top_productos import TOP_ITEMS
 
 app = Flask(__name__)
 
@@ -77,6 +78,7 @@ def index():
     db = get_db()
     stats = db.stats()
     dias = int(request.args.get("dias", 7))
+    top_baratos = db.get_top_baratos(TOP_ITEMS)
     all_highlights = db.get_highlights(dias=dias, min_variacion=5.0)
     by_fuente = defaultdict(lambda: {"subas": [], "bajas": []})
     for h in all_highlights:
@@ -94,6 +96,7 @@ def index():
     return render_template(
         "index.html",
         stats=stats,
+        top_baratos=top_baratos,
         highlights_por_fuente=highlights_por_fuente,
         dias=dias,
     )

@@ -518,6 +518,82 @@ class Database:
 
         return result
 
+    def get_top_baratos(self, items: list, top_n: int = 3):
+        """Para cada item curado devuelve los `top_n` (producto, fuente) más baratos.
+
+        Unifica todas las fuentes: una fila por (producto, fuente) con su último precio,
+        ordenadas por precio ascendente. Ver formato de `items` en top_productos.py.
+        Devuelve: [{"label": str, "items": [{id, nombre, fuente, precio, url}, ...]}, ...]
+        """
+        ph = "%s" if self._pg else "?"
+        date_fn = "DATE(pr.fecha)" if self._pg else "date(pr.fecha)"
+        cte = f"""
+            WITH max_por_fuente AS (
+                SELECT v.fuente_id, MAX({date_fn}) AS max_fecha
+                FROM precios pr JOIN variantes v ON pr.variante_id = v.id
+                GROUP BY v.fuente_id
+            ),
+            latest AS (
+                SELECT v.producto_id, f.nombre AS fuente, pr.precio, v.url_producto
+                FROM precios pr
+                JOIN variantes v ON pr.variante_id = v.id
+                JOIN fuentes f ON v.fuente_id = f.id
+                JOIN max_por_fuente m ON v.fuente_id = m.fuente_id
+                    AND {date_fn} = m.max_fecha
+            )
+        """
+
+        resultado = []
+        for item in items:
+            where = ["p.es_combo = 0"]
+            params = []
+            for inc in item.get("incluir", []):
+                if isinstance(inc, (list, tuple)):
+                    # grupo OR: al menos un término del grupo
+                    where.append("(" + " OR ".join([f"p.nombre_normalizado LIKE {ph}"] * len(inc)) + ")")
+                    params.extend([f"%{t}%" for t in inc])
+                else:
+                    where.append(f"p.nombre_normalizado LIKE {ph}")
+                    params.append(f"%{inc}%")
+            for exc in item.get("excluir", []) or []:
+                where.append(f"p.nombre_normalizado NOT LIKE {ph}")
+                params.append(f"%{exc}%")
+            tamano = item.get("tamano")
+            if tamano:
+                where.append("(" + " OR ".join([f"p.nombre_normalizado LIKE {ph}"] * len(tamano)) + ")")
+                params.extend([f"%{t}%" for t in tamano])
+
+            sql = cte + f"""
+                SELECT p.id, p.nombre_normalizado, l.fuente, l.precio, l.url_producto
+                FROM productos p
+                JOIN latest l ON p.id = l.producto_id
+                WHERE {" AND ".join(where)}
+                ORDER BY l.precio ASC
+                LIMIT {top_n}
+            """
+            if self._pg:
+                import psycopg2.extras
+                with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute(sql, params)
+                    rows = cur.fetchall()
+            else:
+                rows = self.conn.execute(sql, params).fetchall()
+
+            resultado.append({
+                "label": item["label"],
+                "items": [
+                    {
+                        "id": r["id"],
+                        "nombre": r["nombre_normalizado"],
+                        "fuente": r["fuente"],
+                        "precio": r["precio"],
+                        "url": r["url_producto"] or "",
+                    }
+                    for r in rows
+                ],
+            })
+        return resultado
+
     def get_precios_carrito(self, producto_ids: list):
         if not producto_ids:
             return []
