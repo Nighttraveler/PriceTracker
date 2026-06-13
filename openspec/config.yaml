@@ -1,20 +1,53 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Stack: Python/Flask + Jinja2 + Bootstrap 5 + PostgreSQL.
+  Frontend: no JS framework — vanilla JS with global helpers defined in base.html.
+  Language: English for all artifacts, code comments, and UI copy going forward.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Core architecture: scraper → normalizer → db → app/reporter.
+  DB is append-only: prices are never updated or deleted.
+  Schema: fuentes → variantes ← productos, variantes ← precios.
+  One producto row per normalized product name; one variante per source where it appears.
+
+  Cart system: persists in localStorage (key: pt_carrito, array of numeric product IDs).
+  Global helpers available on every page via base.html: getCart, addToCart, removeFromCart,
+  isInCart, updateBadge. Never reimplement localStorage logic — reuse these.
+
+  Normalizer uses fuzzy matching (rapidfuzz token_sort_ratio, threshold 98).
+  Critical rule: if numbers differ between two names, score is forced to 0 — prevents
+  merging "leche 1L" with "leche 200ml".
+
+  Latest-price queries: always use the max_por_fuente CTE (max date per source
+  independently). Never use a global MAX(fecha) — it drops sources not scraped on the
+  same day. This pattern appears in /ahorro, cart optimal, and search queries.
+
+  Schema migrations: always use Alembic (alembic/versions/). Never ALTER TABLE manually
+  or in init_schema(). Update the _DDL constant in db.py in parallel so fresh installs
+  include the column.
+
+  Flask cache: /, /precios, /ahorro use a 4h TTL (SimpleCache). /buscar uses 2h.
+  /carrito and /api/* routes are NOT cached — they serve live data.
+
+  VTEX scrapers (Día, Carrefour): category tree fetched dynamically; only top-level
+  category IDs return results. Max offset: 2500 (VTEX_MAX_OFFSET).
+
+rules:
+  proposal:
+    - Write in English
+    - Explicitly state whether the change requires an Alembic migration
+    - Flag if the change affects cached routes (/, /precios, /ahorro, /buscar)
+    - Flag if the change touches latest-price queries (max_por_fuente CTE)
+
+  design:
+    - Write in English
+    - If schema changes are involved, include the Alembic migration DDL
+    - For frontend changes: specify whether global helpers from base.html are reused or new ones are needed
+    - For scraper changes: note whether VTEX or HTML-based scrapers are affected
+
+  tasks:
+    - Write in English
+    - Always include a verification task against the real running app
+    - If an Alembic migration is needed: make it the first task group
+    - For scraper tasks: include a --dry-run --limit 20 step before running in full
+    - Mark tasks that require docker-compose run (DB-touching maintenance scripts)
