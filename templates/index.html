@@ -58,6 +58,7 @@
             <td><a href="/producto/{{ it.id }}" class="text-decoration-none">{{ it.nombre }}</a></td>
             <td><span class="fuente-chip fuente-{{ it.fuente }}">{{ it.fuente }}</span></td>
             <td class="text-end fw-semibold text-nowrap">$ {{ "%.2f"|format(it.precio) }}</td>
+            <td class="text-end"><button class="cart-add-btn btn btn-sm btn-outline-secondary" data-id="{{ it.id }}" title="Agregar al carrito">🛒</button></td>
           </tr>
           {% endfor %}
         </tbody>
@@ -96,13 +97,14 @@
       {% if bloque.subas %}
       <div class="table-responsive">
       <table class="table table-hover table-sm mb-0">
-        <thead><tr><th>Producto</th><th>Precio actual</th><th>Variación</th></tr></thead>
+        <thead><tr><th>Producto</th><th>Precio actual</th><th>Variación</th><th></th></tr></thead>
         <tbody>
           {% for h in bloque.subas %}
           <tr{% if loop.index > 20 %} class="hl-extra d-none" data-sec="{{ f }}-subas"{% endif %}>
             <td><a href="/producto/{{ h['id'] }}" class="text-decoration-none">{{ h['nombre_normalizado'] }}</a></td>
             <td>$ {{ "%.2f"|format(h['precio_actual']) }}</td>
             <td><span class="badge-up">▲ {{ h['variacion_pct'] }}%</span></td>
+            <td class="text-end"><button class="cart-add-btn btn btn-sm btn-outline-secondary" data-id="{{ h['id'] }}" title="Agregar al carrito">🛒</button></td>
           </tr>
           {% endfor %}
         </tbody>
@@ -128,13 +130,14 @@
       {% if bloque.bajas %}
       <div class="table-responsive">
       <table class="table table-hover table-sm mb-0">
-        <thead><tr><th>Producto</th><th>Precio actual</th><th>Variación</th></tr></thead>
+        <thead><tr><th>Producto</th><th>Precio actual</th><th>Variación</th><th></th></tr></thead>
         <tbody>
           {% for h in bloque.bajas %}
           <tr{% if loop.index > 20 %} class="hl-extra d-none" data-sec="{{ f }}-bajas"{% endif %}>
             <td><a href="/producto/{{ h['id'] }}" class="text-decoration-none">{{ h['nombre_normalizado'] }}</a></td>
             <td>$ {{ "%.2f"|format(h['precio_actual']) }}</td>
             <td><span class="badge-down">▼ {{ h['variacion_pct']|abs }}%</span></td>
+            <td class="text-end"><button class="cart-add-btn btn btn-sm btn-outline-secondary" data-id="{{ h['id'] }}" title="Agregar al carrito">🛒</button></td>
           </tr>
           {% endfor %}
         </tbody>
@@ -177,6 +180,29 @@ document.querySelectorAll('.hl-toggle').forEach(btn => {
     const expanding = rows[0].classList.contains('d-none');
     rows.forEach(r => r.classList.toggle('d-none'));
     this.textContent = expanding ? 'Ver menos ▲' : `Ver ${extra} más ▼`;
+  });
+});
+
+function reflectState(btn) {
+  const id = parseInt(btn.dataset.id, 10);
+  if (isInCart(id)) {
+    btn.textContent = '✓';
+    btn.disabled = true;
+    btn.classList.remove('btn-outline-secondary');
+    btn.classList.add('btn-success');
+  } else {
+    btn.textContent = '🛒';
+    btn.disabled = false;
+    btn.classList.remove('btn-success');
+    btn.classList.add('btn-outline-secondary');
+  }
+}
+
+document.querySelectorAll('.cart-add-btn').forEach(btn => {
+  reflectState(btn);
+  btn.addEventListener('click', function () {
+    addToCart(parseInt(this.dataset.id, 10));
+    reflectState(this);
   });
 });
 </script>
