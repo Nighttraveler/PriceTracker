@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scrapers/base.py — Clase base para todos los scrapers."""
+"""scrapers/base.py — Base class for all scrapers."""
 
 import time
 import random
@@ -28,10 +28,10 @@ class BaseScraper:
             resp.raise_for_status()
             return BeautifulSoup(resp.text, "lxml")
 
-    def limpiar_precio(self, texto: str) -> float:
+    def parse_price(self, texto: str) -> float:
         # Remove everything except digits, commas, and dots
         texto = re.sub(r'[^\d,.]', '', texto)
-        
+
         # If both dot and comma are present, e.g. 1.234,56
         if ',' in texto and '.' in texto:
             if texto.rfind(',') > texto.rfind('.'):
@@ -53,9 +53,9 @@ class BaseScraper:
                     # Thousands separator, e.g. 1.432 -> 1432
                     texto = texto.replace('.', '')
                 elif len(parts[1]) > 3:
-                    # Special Magento 5-digit decimal bug, e.g. 4.92401 -> 4924.01
+                    # Magento 5-digit decimal bug, e.g. 4.92401 -> 4924.01
                     texto = parts[0] + parts[1][:3] + '.' + parts[1][3:]
-                
+
         return float(texto)
 
     def fetch_all(self, limit=None) -> list[dict]:

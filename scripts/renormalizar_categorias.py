@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Recalcula categorías y es_combo de todos los productos según normalizer.py."""
+"""Recalculates category and is_combo for all products using the current normalizer rules."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from db import Database
-from normalizer import detectar_categoria, es_combo
+from normalizer import detect_category, is_combo
 
 
 def main():
@@ -14,23 +14,23 @@ def main():
         "SELECT id, nombre_normalizado, categoria, es_combo FROM productos"
     )
 
-    print(f"Total productos: {len(productos)}")
-    actualizados = 0
+    print(f"Total products: {len(productos)}")
+    updated = 0
 
     for p in productos:
-        nueva_cat   = detectar_categoria(p["nombre_normalizado"])
-        nuevo_combo = int(es_combo(p["nombre_normalizado"]))
+        new_cat   = detect_category(p["nombre_normalizado"])
+        new_combo = int(is_combo(p["nombre_normalizado"]))
 
-        if nueva_cat != p["categoria"] or nuevo_combo != p["es_combo"]:
+        if new_cat != p["categoria"] or new_combo != p["es_combo"]:
             db._execute(
                 "UPDATE productos SET categoria = ?, es_combo = ? WHERE id = ?",
-                (nueva_cat, nuevo_combo, p["id"])
+                (new_cat, new_combo, p["id"])
             )
-            actualizados += 1
+            updated += 1
 
     db.commit()
-    print(f"Actualizados: {actualizados}")
-    print(f"Sin cambios:  {len(productos) - actualizados}")
+    print(f"Updated: {updated}")
+    print(f"Unchanged: {len(productos) - updated}")
 
 
 if __name__ == "__main__":

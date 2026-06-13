@@ -216,24 +216,24 @@ class TestCarrefourParseoProductos:
         assert len(productos) == 10
 
 
-# ── BaseScraper.limpiar_precio — casos de error ───────────────────────────────
+# ── BaseScraper.parse_price — error cases ────────────────────────────────────
 
-class TestLimpiarPrecioErrores:
+class TestParsePriceErrors:
     scraper = BaseScraper()
 
     def test_string_solo_simbolos(self):
-        # Solo símbolo de peso sin número → debe lanzar ValueError
+        # Currency symbol with no digits → must raise ValueError
         with pytest.raises((ValueError, Exception)):
-            self.scraper.limpiar_precio("$")
+            self.scraper.parse_price("$")
 
     def test_string_vacio(self):
         with pytest.raises((ValueError, Exception)):
-            self.scraper.limpiar_precio("")
+            self.scraper.parse_price("")
 
     def test_precio_con_espacios_internos(self):
-        assert self.scraper.limpiar_precio("1 500,00") == 150000.0 or \
-               self.scraper.limpiar_precio("1 500,00") == 1500.0
-        # Comportamiento aceptable: los espacios se eliminan antes de parsear
+        assert self.scraper.parse_price("1 500,00") == 150000.0 or \
+               self.scraper.parse_price("1 500,00") == 1500.0
+        # Acceptable: spaces are stripped before parsing
 
     def test_precio_con_texto_adicional(self):
-        assert self.scraper.limpiar_precio("Precio: $1.500,00") == 1500.0
+        assert self.scraper.parse_price("Precio: $1.500,00") == 1500.0

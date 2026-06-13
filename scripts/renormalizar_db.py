@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Re-corre el fuzzy matching para todas las variantes con el normalizer actual.
+"""Re-runs fuzzy matching for all variants using the current normalizer.
 
-Útil después de cambiar UMBRAL_SIMILITUD, _normalizar_para_match o cualquier
-lógica de matching en normalizer.py. Redirige variantes que ahora matchean a
-un producto existente y limpia productos huérfanos que quedaron sin variantes.
+Useful after changing SIMILARITY_THRESHOLD, _normalize_for_match, or any
+matching logic in normalizer.py. Redirects variants that now match an existing
+product and cleans up orphan products that were left without variants.
 """
 import sys
 from pathlib import Path
@@ -13,7 +13,7 @@ from db import Database
 from normalizer import Normalizer
 
 
-def re_normalizar_db():
+def renormalize_db():
     db = Database()
     norm = Normalizer(db)
 
@@ -21,41 +21,41 @@ def re_normalizar_db():
         "SELECT id, nombre_original, fuente_id, producto_id FROM variantes"
     )
 
-    print(f"Total variantes a procesar: {len(variantes)}")
-    actualizadas = 0
+    print(f"Total variants to process: {len(variantes)}")
+    updated = 0
 
     for v in variantes:
-        nuevo_id = norm.obtener_o_crear_producto(v["nombre_original"], v["fuente_id"])
-        if nuevo_id != v["producto_id"]:
-            print(f"  Redirigiendo '{v['nombre_original']}': producto {v['producto_id']} → {nuevo_id}")
+        new_id = norm.get_or_create_product(v["nombre_original"], v["fuente_id"])
+        if new_id != v["producto_id"]:
+            print(f"  Redirecting '{v['nombre_original']}': product {v['producto_id']} → {new_id}")
             db._execute(
                 "UPDATE variantes SET producto_id = ? WHERE id = ?",
-                (nuevo_id, v["id"])
+                (new_id, v["id"])
             )
-            actualizadas += 1
+            updated += 1
 
     db.commit()
-    print(f"\nVariantes redirigidas: {actualizadas}")
+    print(f"\nVariants redirected: {updated}")
 
-    # Limpiar productos huérfanos (sin variantes tras las fusiones)
-    huerfanos = db._fetchall("""
+    # Remove orphan products (no variants left after merges)
+    orphans = db._fetchall("""
         SELECT id, nombre_normalizado FROM productos
         WHERE id NOT IN (SELECT DISTINCT producto_id FROM variantes)
     """)
 
-    if huerfanos:
-        print(f"Productos huérfanos a eliminar: {len(huerfanos)}")
-        for p in huerfanos:
-            print(f"  Eliminando: {p['nombre_normalizado']}")
-        ids = tuple(p["id"] for p in huerfanos)
+    if orphans:
+        print(f"Orphan products to delete: {len(orphans)}")
+        for p in orphans:
+            print(f"  Deleting: {p['nombre_normalizado']}")
+        ids = tuple(p["id"] for p in orphans)
         placeholders = ",".join(["?"] * len(ids))
         db._execute(f"DELETE FROM productos WHERE id IN ({placeholders})", ids)
         db.commit()
     else:
-        print("Sin productos huérfanos.")
+        print("No orphan products.")
 
-    print("Re-normalización completada.")
+    print("Re-normalization complete.")
 
 
 if __name__ == "__main__":
-    re_normalizar_db()
+    renormalize_db()

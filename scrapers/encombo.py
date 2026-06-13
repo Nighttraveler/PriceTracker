@@ -53,7 +53,7 @@ class EncomboScraper(BaseScraper):
                             if not precio_raw:
                                 continue
                             
-                            precio = self.limpiar_precio(precio_raw)
+                            precio = self.parse_price(precio_raw)
                             if precio <= 0:
                                 continue
 

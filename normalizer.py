@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-normalizer.py — Normaliza nombres de productos y hace fuzzy matching entre fuentes.
+normalizer.py — Normalizes product names and performs fuzzy matching across sources.
 """
 
 import re
 import unicodedata
 from rapidfuzz import fuzz
 
-UMBRAL_SIMILITUD = 98
+SIMILARITY_THRESHOLD = 98
 
-# Orden importa: categorías más específicas primero para evitar falsos positivos.
+# Order matters: more specific categories first to avoid false positives.
 CATEGORIAS = {
     # ── Combos / packs ─────────────────────────────────────────────────────────
     "combos": [
@@ -50,8 +50,8 @@ CATEGORIAS = {
         "chupetine", "paleta dulce", "marshmallow", "oblea",
     ],
 
-    # ── Higiene personal — antes de condimentos para que "romero", "jengibre",
-    # "aceite de argan" en nombres de shampoos/acondicionadores no caigan allá ──
+    # ── Higiene personal — before condimentos so that "romero", "jengibre",
+    # "aceite de argan" in shampoo/conditioner names don't fall there ──────────
     "higiene": [
         "shampoo", "acondicionador", "desodorante",
         "pasta dental", "papel higienico",
@@ -70,8 +70,8 @@ CATEGORIAS = {
         "toallita",
     ],
 
-    # ── Almacén — antes de condimentos para que "sopa de ... romero" no quede
-    # en condimentos por el keyword de hierba ────────────────────────────────────
+    # ── Almacén — before condimentos so that "sopa de ... romero" doesn't fall
+    # into condimentos because of the herb keyword ───────────────────────────────
     "almacen": [
         "arroz", "fideo", "harina", "azucar", "aceite", "sal",
         "vinagre", "polenta", "lenteja", "garbanzo", "poroto",
@@ -107,7 +107,7 @@ CATEGORIAS = {
         "postre", "flan", "mousse",
     ],
 
-    # ── Congelados — medallones son siempre congelados (carne, veganos, quinoa) ─
+    # ── Congelados — medallones are always frozen (meat, vegan, quinoa) ─────────
     "congelados": [
         "helado", "empanada", "pizza", "hamburguesa",
         "nugget", "bocadito", "precocido", "rebozado",
@@ -115,8 +115,8 @@ CATEGORIAS = {
         "medallon",
     ],
 
-    # ── Mascotas — antes de carnes para que "alimento para perro sabor carne"
-    # no quede en carnes ──────────────────────────────────────────────────────
+    # ── Mascotas — before carnes so that "alimento para perro sabor carne"
+    # doesn't fall into carnes ──────────────────────────────────────────────────
     "mascotas": [
         "para perro", "para gato",
         "antipulgas", "antiparasitario",
@@ -125,7 +125,7 @@ CATEGORIAS = {
         "cat",
     ],
 
-    # ── Panificados — antes de carnes para que "baguetin sabor jamón" sea pan ──
+    # ── Panificados — before carnes so that "baguetin sabor jamón" is bread ─────
     "panificados": [
         "pan", "tostada", "bizcocho", "factura", "medialuna",
         "budin", "magdalena", "baguet", "lactal", "brioche",
@@ -175,10 +175,10 @@ CATEGORIAS = {
 }
 
 
-STOPWORDS_MATCH = frozenset({"con", "y", "x", "edicion"})
+MATCH_STOPWORDS = frozenset({"con", "y", "x", "edicion"})
 
 
-def limpiar(nombre: str) -> str:
+def clean_name(nombre: str) -> str:
     nombre = nombre.lower()
     nombre = unicodedata.normalize('NFKD', nombre)
     nombre = ''.join(c for c in nombre if not unicodedata.combining(c))
@@ -187,59 +187,59 @@ def limpiar(nombre: str) -> str:
     return nombre
 
 
-def _normalizar_para_match(nombre_limpio: str) -> str:
-    """Normalización adicional usada SOLO para comparación fuzzy, no para almacenamiento.
+def _normalize_for_match(nombre_limpio: str) -> str:
+    """Extra normalization used ONLY for fuzzy comparison, not for storage.
 
-    Resuelve diferencias de notación entre fuentes sin alterar el nombre guardado:
-    - cc → ml  (1 cc = 1 ml, distintas fuentes usan ambas)
+    Resolves notation differences between sources without changing the stored name:
+    - cc → ml  (1 cc = 1 ml, different sources use both)
     - grs → g
-    - "400 ml" → "400ml"  (unifica en un solo token)
-    - Ng → Nml  (g y ml son intercambiables para líquidos; el guard de números distintos
-                 evita fusionar 400ml con 200ml)
-    - años 20XX → eliminados (marketing de edición, no distinguen el producto)
-    - quita conectores ("con", "y", "x", "edicion") que son ruido puro
+    - "400 ml" → "400ml"  (merges into a single token)
+    - Ng → Nml  (g and ml treated as interchangeable; the number guard prevents
+                 merging 400ml with 200ml)
+    - years 20XX → removed (marketing edition names, don't distinguish the product)
+    - strips connectors ("con", "y", "x", "edicion") which are pure noise
     """
     nombre = re.sub(r'\bcc\b', 'ml', nombre_limpio)
     nombre = re.sub(r'\bgrs\b', 'g', nombre)
     nombre = re.sub(r'(\d+)\s+(ml|g|kg|lt|l)\b', r'\1\2', nombre)
     nombre = re.sub(r'(\d+)g\b', r'\1ml', nombre)
     nombre = re.sub(r'\b20\d{2}\b', '', nombre)
-    palabras = [p for p in nombre.split() if p not in STOPWORDS_MATCH]
+    palabras = [p for p in nombre.split() if p not in MATCH_STOPWORDS]
     return ' '.join(palabras)
 
 
-def es_combo(nombre_limpio: str) -> bool:
+def is_combo(nombre_limpio: str) -> bool:
     palabras_combo = {"combo", "pack", "kit", "promo"}
     primer_palabra = nombre_limpio.split()[0] if nombre_limpio.split() else ""
     return primer_palabra in palabras_combo
 
 
-def detectar_categoria(nombre_limpio: str) -> str:
-    # Los combos tienen prioridad antes de cualquier otra categoría
-    if es_combo(nombre_limpio):
+def detect_category(nombre_limpio: str) -> str:
+    # Combos take priority over every other category
+    if is_combo(nombre_limpio):
         return "combos"
 
     palabras = set(nombre_limpio.split())
     for categoria, claves in CATEGORIAS.items():
         if categoria == "combos":
-            continue  # ya manejado arriba
+            continue  # already handled above
         for clave in claves:
             if ' ' in clave:
-                # Multi-word: substring en el nombre completo
+                # Multi-word: substring match against the full name
                 if clave in nombre_limpio:
                     return categoria
             elif len(clave) >= 5:
-                # Palabra larga: prefix match — cubre plurales (galletita→galletitas)
+                # Long word: prefix match — covers plurals (galletita→galletitas)
                 if any(p.startswith(clave) for p in palabras):
                     return categoria
             else:
-                # Palabra corta (sal, te, gin): solo match exacto para evitar falsos positivos
+                # Short word (sal, te, gin): exact match only to avoid false positives
                 if clave.strip() in palabras:
                     return categoria
     return "otros"
 
 
-def normalizar_unidad(nombre_limpio: str):
+def normalize_unit(nombre_limpio: str):
     patrones = [
         (r'(\d+(?:[.,]\d+)?)\s*ml\b',  lambda m: (float(m.group(1).replace(',', '.')), 'ml')),
         (r'(\d+(?:[.,]\d+)?)\s*l\b',   lambda m: (float(m.group(1).replace(',', '.')) * 1000, 'ml')),
@@ -254,7 +254,7 @@ def normalizar_unidad(nombre_limpio: str):
     return None
 
 
-def extraer_numeros(nombre: str):
+def extract_numbers(nombre: str):
     return re.findall(r'\d+', nombre)
 
 
@@ -263,8 +263,8 @@ class Normalizer:
         self.db = db
         self._cache = {}
 
-    def obtener_o_crear_producto(self, nombre_original: str, fuente_id: int) -> int:
-        nombre_limpio = limpiar(nombre_original)
+    def get_or_create_product(self, nombre_original: str, fuente_id: int) -> int:
+        nombre_limpio = clean_name(nombre_original)
 
         if nombre_limpio in self._cache:
             return self._cache[nombre_limpio]
@@ -272,12 +272,12 @@ class Normalizer:
         productos = self.db.get_all_productos()
         mejor_score = 0
         mejor_id = None
-        nombre_match = _normalizar_para_match(nombre_limpio)
-        numeros_actuales = extraer_numeros(nombre_match)
+        nombre_match = _normalize_for_match(nombre_limpio)
+        numeros_actuales = extract_numbers(nombre_match)
 
         for prod in productos:
-            prod_match = _normalizar_para_match(prod["nombre_normalizado"])
-            numeros_prod = extraer_numeros(prod_match)
+            prod_match = _normalize_for_match(prod["nombre_normalizado"])
+            numeros_prod = extract_numbers(prod_match)
             if numeros_actuales and numeros_prod and set(numeros_actuales) != set(numeros_prod):
                 score = 0
             else:
@@ -287,13 +287,13 @@ class Normalizer:
                 mejor_score = score
                 mejor_id = prod["id"]
 
-        if mejor_score >= UMBRAL_SIMILITUD and mejor_id:
+        if mejor_score >= SIMILARITY_THRESHOLD and mejor_id:
             self._cache[nombre_limpio] = mejor_id
             return mejor_id
 
-        categoria = detectar_categoria(nombre_limpio)
-        unidad = normalizar_unidad(nombre_limpio)
-        combo = es_combo(nombre_limpio)
+        categoria = detect_category(nombre_limpio)
+        unidad = normalize_unit(nombre_limpio)
+        combo = is_combo(nombre_limpio)
         nuevo_id = self.db.insert_producto(nombre_limpio, categoria, unidad, es_combo=combo)
         self._cache[nombre_limpio] = nuevo_id
         return nuevo_id

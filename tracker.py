@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Price Tracker — Script principal
-Scrapea precios de La Anónima, Día, Encombo y Carrefour y los guarda en SQLite.
+Price Tracker — Main scraping script.
+Scrapes prices from La Anónima, Día, Encombo, and Carrefour and stores them in the DB.
 """
 
 import argparse
@@ -37,30 +37,30 @@ def run(source: str, dry_run: bool = False, limit: int = None):
     db.init_schema()
     normalizer = Normalizer(db)
 
-    fuentes = list(SCRAPERS.keys()) if source == "all" else [source]
+    sources = list(SCRAPERS.keys()) if source == "all" else [source]
 
-    for fuente_nombre in fuentes:
-        log.info(f"=== Scraping: {fuente_nombre} ===")
-        scraper_cls = SCRAPERS[fuente_nombre]
+    for source_name in sources:
+        log.info(f"=== Scraping: {source_name} ===")
+        scraper_cls = SCRAPERS[source_name]
         scraper = scraper_cls()
 
         try:
-            productos = scraper.fetch_all(limit=limit)
-            log.info(f"{fuente_nombre}: {len(productos)} productos obtenidos")
+            products = scraper.fetch_all(limit=limit)
+            log.info(f"{source_name}: {len(products)} products fetched")
 
             if dry_run:
-                log.info("[DRY-RUN] Primeros resultados:")
-                for p in productos[:5]:
+                log.info("[DRY-RUN] First results:")
+                for p in products[:5]:
                     log.info(f"  {p}")
                 continue
 
-            fuente_id = db.get_or_create_fuente(fuente_nombre, scraper.url_base)
+            fuente_id = db.get_or_create_fuente(source_name, scraper.url_base)
             hoy = date.today().isoformat()
-            insertados = 0
+            inserted = 0
 
-            for producto in productos:
+            for producto in products:
                 try:
-                    prod_id = normalizer.obtener_o_crear_producto(
+                    prod_id = normalizer.get_or_create_product(
                         producto["nombre"], fuente_id
                     )
                     variante_id = db.get_or_create_variante(
@@ -69,16 +69,16 @@ def run(source: str, dry_run: bool = False, limit: int = None):
                         producto.get("url", "")
                     )
                     db.insertar_precio(variante_id, producto["precio"], hoy)
-                    insertados += 1
+                    inserted += 1
                 except Exception as e:
-                    log.warning(f"Error procesando '{producto.get('nombre')}': {e}")
+                    log.warning(f"Error processing '{producto.get('nombre')}': {e}")
 
-            log.info(f"{fuente_nombre}: {insertados} precios guardados para {hoy}")
+            log.info(f"{source_name}: {inserted} prices saved for {hoy}")
 
         except Exception as e:
-            log.error(f"Error scraping {fuente_nombre}: {e}", exc_info=True)
+            log.error(f"Error scraping {source_name}: {e}", exc_info=True)
 
-    log.info("Scraping finalizado.")
+    log.info("Scraping complete.")
 
 
 if __name__ == "__main__":
@@ -86,9 +86,9 @@ if __name__ == "__main__":
     parser.add_argument("--source", default="all",
                         choices=["all", "anonima", "dia", "encombo", "carrefour"])
     parser.add_argument("--dry-run", action="store_true",
-                        help="Scrapear sin guardar en DB")
+                        help="Scrape without saving to DB")
     parser.add_argument("--limit", type=int, default=None,
-                        help="Limitar cantidad de productos por fuente")
+                        help="Limit number of products per source")
     args = parser.parse_args()
 
     run(args.source, dry_run=args.dry_run, limit=args.limit)

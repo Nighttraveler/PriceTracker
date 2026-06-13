@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scrapers/vtex_base.py — Base abstracta para scrapers VTEX Catalog API."""
+"""scrapers/vtex_base.py — Abstract base for VTEX Catalog API scrapers."""
 
 import logging
 import time
@@ -21,9 +21,9 @@ RETRY_BASE_WAIT = 5
 
 
 class VTEXScraper:
-    """Base para scrapers que usan la VTEX Catalog API.
+    """Base class for scrapers using the VTEX Catalog API.
 
-    Subclases deben definir: url_base, name, page_delay, y _get_categories().
+    Subclasses must define: url_base, name, page_delay, and _get_categories().
     """
 
     url_base: str
@@ -31,7 +31,7 @@ class VTEXScraper:
     page_delay: tuple = (0.5, 1.5)
 
     def _get_categories(self) -> dict[int, str]:
-        """Devuelve {cat_id: cat_slug} a scrapear."""
+        """Return {cat_id: cat_slug} mapping to scrape."""
         raise NotImplementedError
 
     def _get_page(self, cat_id: int, from_: int) -> tuple[list, int]:
@@ -46,8 +46,8 @@ class VTEXScraper:
             if resp.status_code == 429:
                 wait = RETRY_BASE_WAIT * (2 ** attempt)
                 log.warning(
-                    f"{self.name}: 429 en offset {from_}, reintentando en {wait}s"
-                    f" (intento {attempt + 1}/{MAX_RETRIES})"
+                    f"{self.name}: 429 at offset {from_}, retrying in {wait}s"
+                    f" (attempt {attempt + 1}/{MAX_RETRIES})"
                 )
                 time.sleep(wait)
                 continue
@@ -65,18 +65,18 @@ class VTEXScraper:
             return resp.json(), total
 
         raise requests.exceptions.RetryError(
-            f"{self.name}: 429 persistente después de {MAX_RETRIES} intentos en offset {from_}"
+            f"{self.name}: persistent 429 after {MAX_RETRIES} attempts at offset {from_}"
         )
 
     def fetch_all(self, limit: int = None) -> list[dict]:
         categories = self._get_categories()
         if not categories:
-            log.error(f"{self.name}: sin categorías, abortando")
+            log.error(f"{self.name}: no categories found, aborting")
             return []
 
         productos = []
         for cat_id, cat_slug in categories.items():
-            log.info(f"{self.name}: categoría {cat_slug} (id={cat_id})")
+            log.info(f"{self.name}: category {cat_slug} (id={cat_id})")
             from_ = 0
             total = None
 
@@ -85,7 +85,7 @@ class VTEXScraper:
                     items, total_cat = self._get_page(cat_id, from_)
                     if total is None:
                         total = total_cat
-                        log.info(f"  {cat_slug}: {total} productos totales")
+                        log.info(f"  {cat_slug}: {total} total products")
 
                     if not items:
                         break
@@ -103,8 +103,8 @@ class VTEXScraper:
 
                             offer = sellers[0].get("commertialOffer", {})
                             precio = offer.get("Price", 0)
-                            # AvailableQuantity puede ser 0 para productos por peso;
-                            # IsAvailable cubre esos casos correctamente.
+                            # AvailableQuantity can be 0 for weight-based products;
+                            # IsAvailable covers those cases correctly.
                             available = (
                                 offer.get("AvailableQuantity", 0) > 0
                                 or offer.get("IsAvailable", False)
@@ -120,7 +120,7 @@ class VTEXScraper:
                                 "url": link if link.startswith("http") else f"{self.url_base}{link}",
                             })
                         except Exception as e:
-                            log.debug(f"{self.name}: error en item: {e}")
+                            log.debug(f"{self.name}: error on item: {e}")
 
                         if limit and len(productos) >= limit:
                             return productos
@@ -130,7 +130,7 @@ class VTEXScraper:
                         break
 
                 except Exception as e:
-                    log.warning(f"{self.name}: error en {cat_slug} offset {from_}: {e}")
+                    log.warning(f"{self.name}: error in {cat_slug} at offset {from_}: {e}")
                     break
 
         return productos

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scrapers/dia.py — Scraper de Supermercados Día (VTEX catalog API)."""
+"""scrapers/dia.py — Scraper for Supermercados Día (VTEX Catalog API)."""
 
 import logging
 import requests
@@ -8,18 +8,18 @@ from .vtex_base import VTEXScraper, HEADERS
 
 log = logging.getLogger(__name__)
 
-# Slugs de categorías a scrapear — se resuelven a IDs desde el árbol VTEX.
-# Usar categorías padre siempre que sea posible para capturar todas las subcategorías.
-# "frescos" incluye: leches, lácteos, carnicería, frutas-y-verduras, fiambrería, pastas.
+# Category slugs to scrape — resolved to IDs from the VTEX category tree.
+# Use parent categories whenever possible to capture all subcategories.
+# "frescos" includes: leches, lácteos, carnicería, frutas-y-verduras, fiambrería, pastas.
 CATEGORIAS_SLUG = [
-    "almacen",       # secos, aceites, pastas, arroz, etc.
-    "desayuno",      # galletitas, infusiones, para untar
-    "bebidas",       # agua, jugos, gaseosas, vinos
-    "frescos",       # leches + lácteos + carnes + frutas + verduras
-    "congelados",    # helados, medallones, etc.
-    "limpieza",      # detergentes, lavandina, etc.
-    "perfumeria",    # higiene personal, farmacia, cuidado del pelo
-    "mascotas",      # alimentos y accesorios para mascotas
+    "almacen",       # dry goods, oils, pasta, rice, etc.
+    "desayuno",      # biscuits, infusions, spreads
+    "bebidas",       # water, juices, sodas, wines
+    "frescos",       # milk + dairy + meats + fruits + vegetables
+    "congelados",    # ice cream, frozen patties, etc.
+    "limpieza",      # detergents, bleach, etc.
+    "perfumeria",    # personal hygiene, pharmacy, hair care
+    "mascotas",      # pet food and accessories
 ]
 
 
@@ -44,7 +44,7 @@ class DiaScraper(VTEXScraper):
                         flatten(node.get("children", []))
 
             flatten(resp.json())
-            log.info(f"Día: {len(slug_to_id)} categorías disponibles en VTEX")
+            log.info(f"Día: {len(slug_to_id)} categories available in VTEX")
 
             return {
                 slug_to_id[s]: s
@@ -52,5 +52,5 @@ class DiaScraper(VTEXScraper):
                 if s in slug_to_id
             }
         except Exception as e:
-            log.warning(f"Día: no se pudo obtener árbol de categorías: {e}")
+            log.warning(f"Día: could not fetch category tree: {e}")
             return {}

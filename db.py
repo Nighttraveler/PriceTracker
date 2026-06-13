@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-db.py — Capa de acceso a la base de datos para Hermes Price Tracker.
-Soporta SQLite (default) y PostgreSQL (cuando DATABASE_URL=postgresql://...).
+db.py — Database access layer for Price Tracker.
+Supports SQLite (default) and PostgreSQL (when DATABASE_URL=postgresql://...).
 """
 
 import os
@@ -30,7 +30,7 @@ class Database:
             self.conn.row_factory = sqlite3.Row
             self.conn.execute("PRAGMA journal_mode=WAL")
 
-    # ── Helpers internos ─────────────────────────────────────────────────────
+    # ── Internal helpers ─────────────────────────────────────────────────────
 
     def _pg_connect(self):
         import psycopg2
@@ -39,7 +39,7 @@ class Database:
         return conn
 
     def _ensure_conn(self):
-        """Reconecta si la conexión PostgreSQL fue cerrada por el servidor."""
+        """Reconnect if the PostgreSQL connection was dropped by the server."""
         if not self._pg:
             return
         try:
@@ -48,7 +48,7 @@ class Database:
             self.conn = self._pg_connect()
 
     def _adapt_sql(self, sql: str) -> str:
-        """Convierte SQL SQLite → PostgreSQL (no-op si _pg es False)."""
+        """Translate SQLite SQL to PostgreSQL syntax (no-op when _pg is False)."""
         if not self._pg:
             return sql
         sql = sql.replace("?", "%s")
@@ -57,7 +57,7 @@ class Database:
             "(CURRENT_DATE + (%s || ' days')::interval)",
         )
         sql = sql.replace("date(pr.fecha)", "DATE(pr.fecha)")
-        # ROUND(expr, n) requiere numeric en PG; double precision no está soportado
+        # ROUND(expr, n) requires numeric in PG; double precision is not supported
         sql = re.sub(
             r'ROUND\((.+?),\s*(\d+)\)',
             lambda m: f'ROUND(({m.group(1)})::numeric, {m.group(2)})',
@@ -67,7 +67,7 @@ class Database:
         return sql
 
     def _execute(self, sql: str, params=()):
-        """Ejecuta una sentencia de escritura (INSERT/UPDATE/DELETE)."""
+        """Execute a write statement (INSERT/UPDATE/DELETE)."""
         self._ensure_conn()
         sql = self._adapt_sql(sql)
         if self._pg:
@@ -77,7 +77,7 @@ class Database:
             self.conn.execute(sql, params or ())
 
     def commit(self):
-        """Commit explícito; no-op en PostgreSQL (autocommit=True)."""
+        """Explicit commit; no-op on PostgreSQL (autocommit=True)."""
         if not self._pg:
             self.conn.commit()
 
@@ -102,7 +102,7 @@ class Database:
         return self.conn.execute(sql, params or ()).fetchone()
 
     def _scalar(self, sql: str, params=()):
-        """Devuelve el primer valor de la primera fila (para COUNT, MAX, etc.)."""
+        """Return the first value of the first row (for COUNT, MAX, etc.)."""
         sql = self._adapt_sql(sql)
         if self._pg:
             with self.conn.cursor() as cur:
@@ -113,7 +113,7 @@ class Database:
         return row[0] if row else None
 
     def _run(self, sql: str, params=()):
-        """Ejecuta un statement de escritura. Convierte INSERT OR IGNORE para PostgreSQL."""
+        """Execute a write statement. Translates INSERT OR IGNORE for PostgreSQL."""
         needs_conflict = self._pg and "INSERT OR IGNORE INTO" in sql
         if needs_conflict:
             sql = sql.replace("INSERT OR IGNORE INTO", "INSERT INTO")
@@ -173,7 +173,7 @@ class Database:
     """
 
     def _sync_pg_sequences(self):
-        """Avanza las secuencias al MAX(id) actual — necesario después de bulk inserts con IDs explícitos."""
+        """Advance sequences to current MAX(id) — required after bulk inserts with explicit IDs."""
         tables = ["fuentes", "productos", "variantes", "precios"]
         with self.conn.cursor() as cur:
             for table in tables:
@@ -196,7 +196,7 @@ class Database:
             except Exception:
                 pass
 
-    # ── Escrituras ───────────────────────────────────────────────────────────
+    # ── Writes ───────────────────────────────────────────────────────────────
 
     def get_or_create_fuente(self, nombre: str, url_base: str) -> int:
         self._run(
@@ -237,7 +237,7 @@ class Database:
             (variante_id, precio, fecha),
         )
 
-    # ── Lecturas ─────────────────────────────────────────────────────────────
+    # ── Reads ────────────────────────────────────────────────────────────────
 
     def get_all_productos(self):
         return self._fetchall("SELECT id, nombre_normalizado FROM productos")
@@ -275,8 +275,8 @@ class Database:
         """, (producto_id,))
 
     def get_historial_producto(self, producto_id: int, dias: int = 90):
-        # Si el mismo producto tiene varias variantes de la misma fuente,
-        # nos quedamos con el registro más reciente (MAX id) por (fuente, día).
+        # When a product has multiple variants from the same source, keep only
+        # the most recent record (MAX id) per (source, day).
         return self._fetchall("""
             WITH last_per_day AS (
                 SELECT MAX(pr.id) as id
@@ -300,7 +300,7 @@ class Database:
             (producto_id,),
         )
 
-    def get_ahorro_por_categoria(self):
+    def savings_by_category(self):
         return self._fetchall("""
             WITH max_por_fuente AS (
                 SELECT v.fuente_id, MAX(date(pr.fecha)) AS max_fecha
@@ -327,7 +327,7 @@ class Database:
             ORDER BY p.categoria, avg_precio
         """)
 
-    def get_carrito_optimo(self, top_n: int = 20):
+    def optimal_cart(self, top_n: int = 20):
         from collections import defaultdict
 
         rows = self._fetchall("""
@@ -386,17 +386,17 @@ class Database:
 
         carrito_por_fuente = defaultdict(list)
         for prod in productos.values():
-            fuente_min = min(prod["fuentes"], key=lambda f: prod["fuentes"][f]["precio"])
-            precio_min = prod["fuentes"][fuente_min]["precio"]
-            precio_max = max(v["precio"] for v in prod["fuentes"].values())
-            carrito_por_fuente[fuente_min].append({
+            cheapest_source = min(prod["fuentes"], key=lambda f: prod["fuentes"][f]["precio"])
+            min_price = prod["fuentes"][cheapest_source]["precio"]
+            max_price = max(v["precio"] for v in prod["fuentes"].values())
+            carrito_por_fuente[cheapest_source].append({
                 "id": prod["id"],
                 "nombre": prod["nombre"],
                 "categoria": prod["categoria"],
-                "precio": precio_min,
-                "url": prod["fuentes"][fuente_min]["url"],
-                "precio_max": precio_max,
-                "ahorro": round(precio_max - precio_min, 2),
+                "precio": min_price,
+                "url": prod["fuentes"][cheapest_source]["url"],
+                "precio_max": max_price,
+                "ahorro": round(max_price - min_price, 2),
                 "todas_fuentes": {f: v["precio"] for f, v in prod["fuentes"].items()},
             })
 
@@ -519,11 +519,11 @@ class Database:
         return result
 
     def get_top_baratos(self, items: list, top_n: int = 3):
-        """Para cada item curado devuelve los `top_n` (producto, fuente) más baratos.
+        """For each curated item, returns the `top_n` cheapest (product, source) pairs.
 
-        Unifica todas las fuentes: una fila por (producto, fuente) con su último precio,
-        ordenadas por precio ascendente. Ver formato de `items` en top_productos.py.
-        Devuelve: [{"label": str, "items": [{id, nombre, fuente, precio, url}, ...]}, ...]
+        Unifies all sources: one row per (product, source) with its latest price,
+        sorted ascending by price. See item format in top_productos.py.
+        Returns: [{"label": str, "items": [{id, nombre, fuente, precio, url}, ...]}, ...]
         """
         ph = "%s" if self._pg else "?"
         date_fn = "DATE(pr.fecha)" if self._pg else "date(pr.fecha)"
@@ -549,7 +549,7 @@ class Database:
             params = []
             for inc in item.get("incluir", []):
                 if isinstance(inc, (list, tuple)):
-                    # grupo OR: al menos un término del grupo
+                    # OR group: at least one term in the group must match
                     where.append("(" + " OR ".join([f"p.nombre_normalizado LIKE {ph}"] * len(inc)) + ")")
                     params.extend([f"%{t}%" for t in inc])
                 else:
@@ -629,9 +629,9 @@ class Database:
         return self.conn.execute(sql, producto_ids).fetchall()
 
     def get_highlights(self, dias: int = 7, min_variacion: float = 5.0):
-        """Devuelve todos los highlights (todas las fuentes, subas y bajas).
-        El agrupado por fuente y dirección se hace en Python para evitar
-        ejecutar el CTE last_per_day N veces.
+        """Return all price highlights (all sources, rises and drops).
+        Grouping by source and direction is done in Python to avoid running
+        the last_per_day CTE N times.
         """
         date_fn = "DATE(pr.fecha)" if self._pg else "date(pr.fecha)"
         return self._fetchall(f"""
@@ -674,8 +674,8 @@ if __name__ == "__main__":
     if args.stats:
         db = Database()
         s = db.stats()
-        print(f"Productos:    {s['productos']}")
-        print(f"Variantes:    {s['variantes']}")
-        print(f"Registros:    {s['precios']}")
-        print(f"Última fecha: {s['ultima_fecha']}")
-        print(f"Fuentes:      {[f['nombre'] for f in s['fuentes']]}")
+        print(f"Products:   {s['productos']}")
+        print(f"Variants:   {s['variantes']}")
+        print(f"Records:    {s['precios']}")
+        print(f"Last date:  {s['ultima_fecha']}")
+        print(f"Sources:    {[f['nombre'] for f in s['fuentes']]}")
