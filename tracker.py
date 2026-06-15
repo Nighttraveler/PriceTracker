@@ -13,6 +13,7 @@ from scrapers.anonima import AnonimaScraper
 from scrapers.dia import DiaScraper
 from scrapers.encombo import EncomboScraper
 from scrapers.carrefour import CarrefourScraper
+from scrapers.base import ScraperBlockedError
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +76,8 @@ def run(source: str, dry_run: bool = False, limit: int = None):
 
             log.info(f"{source_name}: {inserted} prices saved for {hoy}")
 
+        except ScraperBlockedError as e:
+            log.error(f"BLOCKED: {source_name} — {e}")
         except Exception as e:
             log.error(f"Error scraping {source_name}: {e}", exc_info=True)
 

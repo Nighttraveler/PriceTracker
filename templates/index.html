@@ -186,14 +186,14 @@ document.querySelectorAll('.hl-toggle').forEach(btn => {
 function reflectState(btn) {
   const id = parseInt(btn.dataset.id, 10);
   if (isInCart(id)) {
-    btn.textContent = '✓';
-    btn.disabled = true;
-    btn.classList.remove('btn-outline-secondary');
-    btn.classList.add('btn-success');
+    btn.textContent = '✗';
+    btn.disabled = false;
+    btn.classList.remove('btn-outline-secondary', 'btn-success');
+    btn.classList.add('btn-outline-danger');
   } else {
     btn.textContent = '🛒';
     btn.disabled = false;
-    btn.classList.remove('btn-success');
+    btn.classList.remove('btn-outline-danger', 'btn-success');
     btn.classList.add('btn-outline-secondary');
   }
 }
@@ -201,7 +201,12 @@ function reflectState(btn) {
 document.querySelectorAll('.cart-add-btn').forEach(btn => {
   reflectState(btn);
   btn.addEventListener('click', function () {
-    addToCart(parseInt(this.dataset.id, 10));
+    const id = parseInt(this.dataset.id, 10);
+    if (isInCart(id)) {
+      removeFromCart(id);
+    } else {
+      addToCart(id);
+    }
     reflectState(this);
   });
 });

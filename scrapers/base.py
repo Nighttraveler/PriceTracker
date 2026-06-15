@@ -7,6 +7,9 @@ import requests
 import re
 from bs4 import BeautifulSoup
 
+MAX_RETRIES = 3
+RETRY_BASE_WAIT = 5
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     "Accept-Language": "es-AR,es;q=0.9",
@@ -15,18 +18,38 @@ HEADERS = {
 }
 
 
+class ScraperBlockedError(Exception):
+    """Raised when the scraper receives a 403 — the IP or session is blocked."""
+
+
 class BaseScraper:
     url_base = ""
     delay_min = 1.5
     delay_max = 3.5
 
+    def __init__(self):
+        self.session = requests.Session()
+        self.session.headers.update(HEADERS)
+
     def get(self, url: str) -> BeautifulSoup:
         time.sleep(random.uniform(self.delay_min, self.delay_max))
-        with requests.Session() as s:
-            s.headers.update(HEADERS)
-            resp = s.get(url, timeout=15)
+        for attempt in range(MAX_RETRIES):
+            resp = self.session.get(url, timeout=15)
+
+            if resp.status_code == 403:
+                raise ScraperBlockedError(f"Blocked (403): {url}")
+
+            if resp.status_code == 429 or resp.status_code >= 500:
+                wait = RETRY_BASE_WAIT * (2 ** attempt)
+                time.sleep(wait)
+                continue
+
             resp.raise_for_status()
             return BeautifulSoup(resp.text, "lxml")
+
+        raise requests.exceptions.RetryError(
+            f"Failed after {MAX_RETRIES} attempts: {url}"
+        )
 
     def parse_price(self, texto: str) -> float:
         # Remove everything except digits, commas, and dots
