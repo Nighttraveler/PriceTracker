@@ -6,6 +6,7 @@ Scrapes prices from La Anónima, Día, Encombo, and Carrefour and stores them in
 
 import argparse
 import logging
+import time
 from datetime import date
 from db import Database
 from normalizer import Normalizer
@@ -58,6 +59,8 @@ def run(source: str, dry_run: bool = False, limit: int = None):
             fuente_id = db.get_or_create_fuente(source_name, scraper.url_base)
             hoy = date.today().isoformat()
             inserted = 0
+            save_start = time.monotonic()
+            stats_before = normalizer.stats()
 
             for producto in products:
                 try:
@@ -71,10 +74,28 @@ def run(source: str, dry_run: bool = False, limit: int = None):
                     )
                     db.insertar_precio(variante_id, producto["precio"], hoy)
                     inserted += 1
+                    if inserted % 1000 == 0:
+                        elapsed = time.monotonic() - save_start
+                        rate = inserted / elapsed
+                        remaining = len(products) - inserted
+                        eta = remaining / rate if rate > 0 else 0
+                        log.info(
+                            f"{source_name}: {inserted}/{len(products)} saved"
+                            f" — {rate:.1f} prod/s, ETA {eta:.0f}s"
+                        )
                 except Exception as e:
                     log.warning(f"Error processing '{producto.get('nombre')}': {e}")
 
-            log.info(f"{source_name}: {inserted} prices saved for {hoy}")
+            elapsed = time.monotonic() - save_start
+            stats_after = normalizer.stats()
+            hits = stats_after["cache_hits"] - stats_before["cache_hits"]
+            misses = stats_after["cache_misses"] - stats_before["cache_misses"]
+            new_prods = stats_after["new_products"] - stats_before["new_products"]
+            log.info(
+                f"{source_name}: {inserted} prices saved for {hoy}"
+                f" in {elapsed:.0f}s"
+                f" — cache hits={hits} misses={misses} new_products={new_prods}"
+            )
 
         except ScraperBlockedError as e:
             log.error(f"BLOCKED: {source_name} — {e}")

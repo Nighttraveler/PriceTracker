@@ -321,7 +321,7 @@ class TestNormalizerClass:
 
     def test_evitar_merge_animal_aime(self):
         # Similar products from different brands must not be merged
-        self.mock_db.get_all_productos.return_value = [
+        self.normalizer._productos = [
             {"id": 1, "nombre_normalizado": "vino tinto cabernet sauvignon animal x 750 cc"}
         ]
         self.mock_db.insert_producto.return_value = 2
@@ -332,7 +332,7 @@ class TestNormalizerClass:
         assert producto_id == 2, "Animal and Aime are different — must not be merged"
 
     def test_producto_existente_retorna_mismo_id(self):
-        self.mock_db.get_all_productos.return_value = [
+        self.normalizer._productos = [
             {"id": 5, "nombre_normalizado": "leche entera la serenisima x 1 lt"}
         ]
         producto_id = self.normalizer.get_or_create_product(
@@ -357,7 +357,7 @@ class TestNormalizerClass:
 
     def test_fusiona_mismo_producto_descrito_distinto_entre_fuentes(self):
         """Real case: Carrefour and Día describe the same Dove conditioner differently."""
-        self.mock_db.get_all_productos.return_value = [
+        self.normalizer._productos = [
             {"id": 1, "nombre_normalizado": "acondicionador dove hidratacion vitamina a e 400ml"}
         ]
         resultado = self.normalizer.get_or_create_product(
@@ -371,7 +371,7 @@ class TestNormalizerClass:
 
     def test_fusiona_fernet_edicion_mundial_variantes(self):
         """Fernet Branca Edición Mundial 750ml appears with different names per source."""
-        self.mock_db.get_all_productos.return_value = [
+        self.normalizer._productos = [
             {"id": 9957, "nombre_normalizado": "fernet branca edicion mundial 750 ml"}
         ]
         for nombre in [
@@ -386,7 +386,7 @@ class TestNormalizerClass:
 
     def test_no_fusiona_mismo_producto_diferente_tamanio(self):
         """400ml and 200ml are different SKUs and must not be merged."""
-        self.mock_db.get_all_productos.return_value = [
+        self.normalizer._productos = [
             {"id": 1, "nombre_normalizado": "acondicionador dove hidratacion vitamina a e 400ml"}
         ]
         self.mock_db.insert_producto.return_value = 2
@@ -397,11 +397,11 @@ class TestNormalizerClass:
         assert resultado == 2, "400ml and 200ml are different sizes — must not be merged"
 
     def test_cache_evita_queries_repetidas(self):
-        self.mock_db.get_all_productos.return_value = []
         self.mock_db.insert_producto.return_value = 7
 
         self.normalizer.get_or_create_product("arroz largo fino x 500g", fuente_id=1)
         self.normalizer.get_or_create_product("arroz largo fino x 500g", fuente_id=1)
 
-        # get_all_productos should only be called on the first lookup
+        # get_all_productos is called once at __init__, never again per lookup
         assert self.mock_db.get_all_productos.call_count == 1
+        self.mock_db.insert_producto.assert_called_once()

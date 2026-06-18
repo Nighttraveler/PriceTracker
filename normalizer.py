@@ -262,20 +262,25 @@ class Normalizer:
     def __init__(self, db):
         self.db = db
         self._cache = {}
+        self._productos = db.get_all_productos()
+        self._cache_hits = 0
+        self._cache_misses = 0
+        self._new_products = 0
 
     def get_or_create_product(self, nombre_original: str, fuente_id: int) -> int:
         nombre_limpio = clean_name(nombre_original)
 
         if nombre_limpio in self._cache:
+            self._cache_hits += 1
             return self._cache[nombre_limpio]
 
-        productos = self.db.get_all_productos()
+        self._cache_misses += 1
         mejor_score = 0
         mejor_id = None
         nombre_match = _normalize_for_match(nombre_limpio)
         numeros_actuales = extract_numbers(nombre_match)
 
-        for prod in productos:
+        for prod in self._productos:
             prod_match = _normalize_for_match(prod["nombre_normalizado"])
             numeros_prod = extract_numbers(prod_match)
             if numeros_actuales and numeros_prod and set(numeros_actuales) != set(numeros_prod):
@@ -295,5 +300,14 @@ class Normalizer:
         unidad = normalize_unit(nombre_limpio)
         combo = is_combo(nombre_limpio)
         nuevo_id = self.db.insert_producto(nombre_limpio, categoria, unidad, es_combo=combo)
+        self._productos.append({"id": nuevo_id, "nombre_normalizado": nombre_limpio})
         self._cache[nombre_limpio] = nuevo_id
+        self._new_products += 1
         return nuevo_id
+
+    def stats(self) -> dict:
+        return {
+            "cache_hits": self._cache_hits,
+            "cache_misses": self._cache_misses,
+            "new_products": self._new_products,
+        }
