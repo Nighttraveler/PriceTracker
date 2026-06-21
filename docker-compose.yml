@@ -42,6 +42,7 @@ services:
     build: .
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/price_tracker
+      TZ: 'America/Argentina/Buenos_Aires'
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
