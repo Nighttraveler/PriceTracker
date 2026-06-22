@@ -22,12 +22,14 @@
           {% if prod['categoria'] %}
           <span class="badge bg-secondary">{{ prod['categoria'] }}</span>
           {% endif %}
+          {% set url_por_fuente = [] %}
           {% for v in variantes %}
-            {% if v['url_producto'] %}
-            <a href="{{ v['url_producto'] }}" target="_blank" rel="noopener"
-               class="badge text-decoration-none fuente-chip fuente-{{ v['fuente'] }}">
-              {{ v['fuente'] | title }} ↗
-            </a>
+            {% if v['url_producto'] and v['url_producto'] not in url_por_fuente %}
+              <a href="{{ v['url_producto'] }}" target="_blank" rel="noopener"
+                class="badge text-decoration-none fuente-chip fuente-{{ v['fuente'] }}">
+                {{ v['fuente'] | title }} ↗
+              </a>
+              {% set _ = url_por_fuente.append(v['url_producto']) %}
             {% endif %}
           {% endfor %}
         </div>
