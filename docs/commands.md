@@ -2,6 +2,35 @@
 
 > Always activate the virtualenv before any command: `source .venv/bin/activate`
 
+## Full stack (Docker)
+
+```bash
+docker compose up -d            # starts db, app (Flask API), frontend (React), scraper
+docker compose up -d db app     # API-only (no frontend)
+```
+
+The React frontend is at **http://localhost:3000**.
+The Flask API is at **http://localhost:5000** (also available for direct access/debugging).
+
+## Frontend (React Router)
+
+Run from `frontend/`:
+
+```bash
+pnpm dev                # dev server → http://localhost:5173 (HMR, proxies API to localhost:5000)
+pnpm build              # production SSR build → build/
+pnpm start              # serve the production build → http://localhost:3000
+pnpm typecheck          # tsc + React Router type generation
+pnpm lint               # oxlint
+pnpm format             # oxfmt (auto-fix)
+pnpm format:check       # oxfmt (CI check)
+pnpm test               # Vitest unit tests (run once)
+pnpm test:watch         # Vitest in watch mode
+pnpm test:e2e           # Playwright end-to-end (requires pnpm dev running)
+```
+
+## Backend (Flask API + legacy HTML)
+
 ```bash
 # Web dashboard
 python app.py                          # → http://0.0.0.0:5000

@@ -19,12 +19,13 @@ Scraper de precios de supermercados argentinos con dashboard web. Rastrea produc
 
 - **Python 3.11+**
 - **PostgreSQL 16** (producción) / **SQLite** (desarrollo local)
-- **Flask 3** — dashboard web
+- **Flask 3** — JSON API backend (`/api/v1/*`)
+- **React Router v8 (SSR)** + **React 19** — frontend SPA (`frontend/`)
 - **psycopg2** — driver PostgreSQL
 - **rapidfuzz** — fuzzy matching para normalizar nombres entre fuentes
 - **BeautifulSoup4 + lxml** — parsing HTML
-- **Docker + Docker Compose** — contenedores para app, scraper y DB
-- **pytest** — suite de tests unitarios e integración
+- **Docker + Docker Compose** — contenedores para db, API, frontend y scraper
+- **pytest** — suite de tests Python · **Vitest + Playwright** — tests frontend
 
 ---
 
@@ -36,10 +37,16 @@ cd price-tracker
 docker compose up -d
 ```
 
-Esto levanta tres servicios:
+Esto levanta cuatro servicios:
 - **db** — PostgreSQL 16 en `localhost:5432`
-- **app** — Dashboard Flask en `http://localhost:5000`
+- **app** — Flask JSON API en `http://localhost:5000`
+- **frontend** — React SSR app en **http://localhost:3000**
 - **scraper** — Scheduler que corre el scraping automático lun/mié/vie a las 7:00
+
+> Para producción con Traefik, pasá el build arg `VITE_API_URL` con el hostname público de la API:
+> ```bash
+> VITE_API_URL=https://pricetracker.home.arpa docker compose up -d --build
+> ```
 
 ### Migrar datos existentes de SQLite a PostgreSQL
 
@@ -133,16 +140,27 @@ docker compose logs scraper -f
 
 ## Arquitectura
 
-El flujo es: **scraper → normalizer → db → app/reporter**
+El flujo es: **scraper → normalizer → db → api → frontend/reporter**
 
 ```
 price-tracker/
-├── app.py              # Flask — dashboard web (5 rutas)
+├── app.py              # Flask — API JSON (/api/v1/*) + rutas HTML legacy
+├── api.py              # Blueprint /api/v1/* (dashboard, precios, producto, etc.)
+├── cache_ext.py        # flask-caching singleton (evita import circular)
 ├── tracker.py          # CLI de scraping, orquesta todas las fuentes
 ├── db.py               # Capa de acceso: SQLite + PostgreSQL via DATABASE_URL
 ├── normalizer.py       # Fuzzy matching, categorías, caché in-memory
 ├── reporter.py         # Generación de reportes HTML estáticos
 ├── scheduler.py        # Cron lun/mié/vie 7am via librería schedule
+│
+├── frontend/           # React Router v8 SSR SPA
+│   ├── app/
+│   │   ├── routes/     # home, precios, producto.$id, ahorro, buscar, carrito
+│   │   ├── shared/     # ui/, stores/, lib/
+│   │   └── root.tsx
+│   ├── tests/          # Vitest unit tests
+│   ├── e2e/            # Playwright end-to-end tests
+│   └── Dockerfile
 │
 ├── scrapers/
 │   ├── base.py         # BaseScraper: requests con delay, limpiar_precio()
@@ -151,31 +169,18 @@ price-tracker/
 │   ├── encombo.py      # Encombo — HTML
 │   └── carrefour.py    # Carrefour — VTEX Catalog API REST
 │
-├── templates/          # Jinja2 + Bootstrap 5
-│   ├── base.html
-│   ├── index.html      # Stats + highlights de variaciones
-│   ├── precios.html    # Tabla comparativa paginada
-│   ├── ahorro.html     # Carrito óptimo + promedios por categoría
-│   ├── buscar.html     # Búsqueda con filtros
-│   └── producto.html   # Historial con gráfico Chart.js
+├── templates/          # Jinja2 legacy (en transición)
 │
 ├── scripts/
-│   ├── migrate_sqlite_to_postgres.py  # Migración one-time SQLite → PostgreSQL
-│   ├── renormalizar_db.py             # Re-corre fuzzy matching para todas las variantes
-│   ├── renormalizar_categorias.py     # Recalcula categorías de todos los productos
-│   ├── migrar_fechas.py               # TEXT → TIMESTAMP en columna fecha
-│   └── corregir_timestamps.py         # Corrige timestamps inconsistentes
+│   ├── migrate_sqlite_to_postgres.py
+│   ├── renormalizar_db.py
+│   ├── renormalizar_categorias.py
+│   ├── migrar_fechas.py
+│   └── corregir_timestamps.py
 │
-├── tests/
-│   ├── conftest.py
-│   ├── test_normalizer.py              # ~70 tests unitarios de normalización
-│   ├── test_limpiar_precio.py          # Tests de parsing de precios
-│   ├── test_scrapers_unit.py           # Tests con mocks (sin red)
-│   ├── test_scrapers_filtering.py      # Tests de filtros de disponibilidad
-│   └── test_scrapers_integration.py   # Tests con requests HTTP reales
-│
-├── Dockerfile
-├── docker-compose.yml  # Servicios: db, app, scraper
+├── tests/              # pytest (Python)
+├── Dockerfile          # imagen Flask
+├── docker-compose.yml  # Servicios: db, app, frontend, scraper
 ├── Makefile
 └── data/
     └── precios.db      # SQLite local (no versionado)
@@ -222,15 +227,16 @@ CREATE TABLE precios (
 
 ---
 
-## Dashboard web
+## Dashboard web (React, `http://localhost:3000`)
 
 | Ruta | Descripción |
 |---|---|
 | `/` | Stats generales + highlights de variaciones de precio |
 | `/precios` | Tabla comparativa paginada, filtrable por categoría |
-| `/ahorro` | Precio promedio por categoría/fuente + carrito óptimo (productos más baratos en 2+ fuentes) |
+| `/ahorro` | Precio promedio por categoría/fuente + carrito óptimo |
 | `/buscar` | Búsqueda con filtros de fuente y categoría |
-| `/producto/<id>` | Historial de precios con gráfico Chart.js |
+| `/producto/:id` | Historial de precios con gráfico Recharts |
+| `/carrito` | Carrito personalizado con cálculo óptimo de compra |
 
 ---
 

@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
+    shm_size: 256mb
     environment:
       POSTGRES_DB: price_tracker
       POSTGRES_USER: user
@@ -37,6 +38,24 @@ services:
       - "traefik.http.routers.pricetracker-secure.service=pricetracker"
       # Service
       - "traefik.http.services.pricetracker.loadbalancer.server.port=5000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the browser bundle at build time — must be the URL the
+        # *browser* uses to reach the Flask API (Traefik public hostname or
+        # http://localhost:5000 for local-only use).
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:5000}
+    environment:
+      # Used by the SSR Node server to call Flask internally at build time.
+      API_URL: http://app:5000
+      PORT: 3000
+      TZ: 'America/Argentina/Buenos_Aires'
+    ports:
+      - "3000:3000"
+    depends_on:
+      - app
 
   scraper:
     build: .
