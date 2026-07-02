@@ -2,7 +2,7 @@
 """scrapers/anonima.py — Scraper de La Anónima."""
 
 import logging
-from scrapers.base import BaseScraper
+from scrapers.base import BaseScraper, ScraperBlockedError
 
 log = logging.getLogger(__name__)
 
@@ -19,9 +19,20 @@ CATEGORIAS_URL = [
 
 class AnonimaScraper(BaseScraper):
     url_base = "https://www.laanonima.com.ar"
+    # The site is behind CloudFront/AWS WAF: pace requests well below the
+    # base default so 7 category fetches don't look like a burst.
+    delay_min = 8
+    delay_max = 20
 
     def fetch_all(self, limit=None) -> list[dict]:
         productos = []
+        # Warm-up: visit the homepage first so category requests carry the
+        # cookies a real session would have.
+        try:
+            self.session.get(self.url_base, timeout=15)
+        except Exception as e:
+            log.warning(f"Warm-up request failed: {e}")
+
         for categoria in CATEGORIAS_URL:
             url = f"{self.url_base}/{categoria}"
             try:
@@ -59,6 +70,10 @@ class AnonimaScraper(BaseScraper):
                     if limit and len(productos) >= limit:
                         return productos
 
+            except ScraperBlockedError:
+                # Abort the whole run: keeping going against a blocking WAF
+                # only worsens the IP's reputation.
+                raise
             except Exception as e:
                 log.warning(f"Error en {url}: {e}")
 

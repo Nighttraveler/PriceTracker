@@ -3,23 +3,23 @@
 
 import time
 import random
-import requests
 import re
 from bs4 import BeautifulSoup
+from curl_cffi import requests as curl_requests
 
 MAX_RETRIES = 3
-RETRY_BASE_WAIT = 5
+RETRY_BASE_WAIT = 15
 
+# Only Accept-Language is set manually: curl_cffi's impersonation supplies a
+# User-Agent and sec-ch-ua headers consistent with the TLS fingerprint, and a
+# manual UA that mismatches the fingerprint is itself a bot signal.
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     "Accept-Language": "es-AR,es;q=0.9",
-    "Accept": "text/html,application/xhtml+xml,application/xhtml;q=0.9,*/*;q=0.8",
-    "Referer": "https://www.google.com.ar/",
 }
 
 
 class ScraperBlockedError(Exception):
-    """Raised when the scraper receives a 403 — the IP or session is blocked."""
+    """Raised on 403, or on persistent 429/5xx — the IP or session is blocked."""
 
 
 class BaseScraper:
@@ -28,7 +28,7 @@ class BaseScraper:
     delay_max = 3.5
 
     def __init__(self):
-        self.session = requests.Session()
+        self.session = curl_requests.Session(impersonate="chrome")
         self.session.headers.update(HEADERS)
 
     def get(self, url: str) -> BeautifulSoup:
@@ -47,8 +47,9 @@ class BaseScraper:
             resp.raise_for_status()
             return BeautifulSoup(resp.text, "lxml")
 
-        raise requests.exceptions.RetryError(
-            f"Failed after {MAX_RETRIES} attempts: {url}"
+        # Sustained 429/5xx from a WAF-fronted site is a block, not noise.
+        raise ScraperBlockedError(
+            f"Blocked (persistent 429/5xx after {MAX_RETRIES} attempts): {url}"
         )
 
     def parse_price(self, texto: str) -> float:

@@ -1,10 +1,6 @@
-# Spec: scraper-request-resilience
+# Spec delta: scraper-request-resilience
 
-## Purpose
-
-Define how the scraper base class maintains persistent HTTP sessions across requests and retries transient failures (rate limits and server errors) with exponential backoff.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Session persists across requests within a scrape run
 `BaseScraper` SHALL create one `curl_cffi.requests.Session(impersonate="chrome")` per instance in `__init__()` and reuse it for all `get()` calls. Headers SHALL be set on the session, not per-request.
