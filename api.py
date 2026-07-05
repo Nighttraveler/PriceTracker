@@ -133,6 +133,16 @@ def compute_optimal_cart(rows):
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+@api_bp.get("/health")
+def api_health():
+    try:
+        db = _get_db()
+        db._scalar("SELECT 1")
+        return jsonify({"status": "ok"})
+    except Exception:
+        return jsonify({"status": "error"}), 503
+
+
 @api_bp.get("/dashboard")
 @cache.cached(timeout=CACHE_TTL, query_string=True)
 def api_dashboard():

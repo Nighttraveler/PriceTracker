@@ -22,6 +22,13 @@ def _mock_db(monkeypatch, **methods):
     return db
 
 
+def test_health_returns_200(client, monkeypatch):
+    _mock_db(monkeypatch, _scalar=1)
+    resp = client.get("/api/v1/health")
+    assert resp.status_code == 200
+    assert resp.get_json() == {"status": "ok"}
+
+
 def test_dashboard_returns_200(client, monkeypatch):
     _mock_db(
         monkeypatch,
