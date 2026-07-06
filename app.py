@@ -19,8 +19,12 @@ app = Flask(__name__)
 CACHE_TTL = int(os.environ.get("CACHE_TTL", 4 * 3600))
 cache.init_app(app, config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": CACHE_TTL})
 
-_cors_origin = os.environ.get("CORS_ORIGIN", "http://localhost:5173")
-CORS(app, resources={r"/api/v1/*": {"origins": _cors_origin}})
+_cors_origins = [
+    o.strip()
+    for o in os.environ.get("CORS_ORIGIN", "http://localhost:5173").split(",")
+    if o.strip()
+]
+CORS(app, resources={r"/api/v1/*": {"origins": _cors_origins}})
 app.register_blueprint(api_bp)
 
 

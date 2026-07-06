@@ -24,6 +24,8 @@ services:
       TZ: 'America/Argentina/Buenos_Aires'
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
+      # Origins the *browser* loads the frontend from (comma-separated).
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://pricetracker.home.arpa,https://pricetracker.home.arpa,http://pricetracker.home.arpa:3000,http://localhost:3000}
     ports:
       - "5000:5000"
     volumes:
@@ -38,15 +40,30 @@ services:
       retries: 3
       start_period: 20s
     restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      # /api en el mismo hostname que el frontend → mismo origen, sin CORS ni mixed content.
+      # (regla más larga = mayor prioridad que la del frontend)
+      - "traefik.http.routers.pricetracker-api.rule=Host(`pricetracker.home.arpa`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.pricetracker-api.entrypoints=web"
+      - "traefik.http.routers.pricetracker-api.service=pricetracker-api"
+      - "traefik.http.routers.pricetracker-api-secure.rule=Host(`pricetracker.home.arpa`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.pricetracker-api-secure.entrypoints=websecure"
+      - "traefik.http.routers.pricetracker-api-secure.tls=true"
+      - "traefik.http.routers.pricetracker-api-secure.service=pricetracker-api"
+      - "traefik.http.services.pricetracker-api.loadbalancer.server.port=5000"
+    networks:
+      - default
+      - proxy
 
   frontend:
     build:
       context: ./frontend
       args:
-        # Baked into the browser bundle at build time — must be the URL the
-        # *browser* uses to reach the Flask API (Traefik public hostname or
-        # http://localhost:5000 for local-only use).
-        VITE_API_URL: ${VITE_API_URL:-http://pricetracker.home.arpa:5000}
+        # Baked into the browser bundle at build time. Empty = relative URLs
+        # (same origin): Traefik rutea /api al servicio app en el mismo host.
+        # Setear solo si el API vive en otro origen (requiere CORS).
+        VITE_API_URL: ${VITE_API_URL:-}
     environment:
       # Used by the SSR Node server to call Flask internally at build time.
       API_URL: http://app:5000
