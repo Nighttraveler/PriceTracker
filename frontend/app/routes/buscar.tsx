@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { useSearchParams, Link } from "react-router"
+import { useDebounce } from "~/shared/lib/useDebounce"
 import { useQuery } from "@tanstack/react-query"
 import type { Route } from "./+types/buscar"
 import { api } from "~/shared/lib/api"
@@ -31,15 +32,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 const fmt = (n: number) =>
   n?.toLocaleString("es-AR", { maximumFractionDigits: 0 })
-
-function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay)
-    return () => clearTimeout(t)
-  }, [value, delay])
-  return debounced
-}
 
 export default function Buscar({ loaderData }: Route.ComponentProps) {
   const [searchParams, setSearchParams] = useSearchParams()

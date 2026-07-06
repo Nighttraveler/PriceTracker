@@ -1,10 +1,11 @@
 import { useState } from "react"
 import { Link } from "react-router"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { X, Search } from "lucide-react"
 import type { Route } from "./+types/carrito"
 import { api } from "~/shared/lib/api"
+import { useDebounce } from "~/shared/lib/useDebounce"
 import { useCartStore } from "~/shared/stores/cart"
 import { FuenteChip } from "~/shared/ui/FuenteChip"
 import { Card, CardContent } from "~/shared/ui/shadcn/card"
@@ -24,6 +25,33 @@ const fmt = (n: number) =>
 
 // ── Cart-search modal ─────────────────────────────────────────────────────
 
+const minPrice = (prod: ModalResult) =>
+  Math.min(
+    ...Object.values(prod.fuentes).map((f) => (f as { precio: number }).precio)
+  )
+
+function AddControl({
+  prod,
+  inCart,
+  onAdd,
+}: {
+  prod: ModalResult
+  inCart: boolean
+  onAdd: (prod: ModalResult) => void
+}) {
+  if (inCart) {
+    return <span className="text-green-600 font-semibold text-xs">✓ Agregado</span>
+  }
+  return (
+    <button
+      onClick={() => onAdd(prod)}
+      className="bg-blue-600 text-white text-xs px-2.5 py-1 rounded hover:bg-blue-700 transition-colors"
+    >
+      Agregar
+    </button>
+  )
+}
+
 function CartSearchModal({
   open,
   onClose,
@@ -33,14 +61,16 @@ function CartSearchModal({
 }) {
   const [q, setQ] = useState("")
   const [page, setPage] = useState(1)
+  const debouncedQ = useDebounce(q, 300)
   const { add, has } = useCartStore()
 
   const { data, isFetching } = useQuery({
-    queryKey: ["buscar_carrito", q, page],
+    queryKey: ["buscar_carrito", debouncedQ, page],
     queryFn: () =>
       api
-        .get(`/api/v1/buscar_carrito?q=${encodeURIComponent(q)}&page=${page}&per_page=10`)
+        .get(`/api/v1/buscar_carrito?q=${encodeURIComponent(debouncedQ)}&page=${page}&per_page=10`)
         .then((r) => r.data),
+    placeholderData: keepPreviousData,
     staleTime: 60 * 1000,
   })
 
@@ -48,9 +78,15 @@ function CartSearchModal({
   const totalPages = data?.total_pages ?? 1
   const total = data?.total ?? 0
 
+  const handleAdd = (prod: ModalResult) => {
+    add(prod.id)
+    toast.success(`${prod.nombre} agregado al carrito`)
+    onClose()
+  }
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl p-0">
+      <DialogContent className="sm:max-w-2xl p-0 flex flex-col max-h-[85dvh]">
         <DialogHeader className="px-4 pt-4 pb-0">
           <DialogTitle>Seleccioná un producto</DialogTitle>
           <input
@@ -66,35 +102,33 @@ function CartSearchModal({
           />
         </DialogHeader>
 
-        <div className="px-0 pb-0">
+        <div className="flex-1 min-h-0 overflow-y-auto">
           {isFetching && (
             <p className="text-xs text-muted-foreground px-4 pb-2">Buscando…</p>
           )}
 
-          {!isFetching && !resultados.length && q && (
+          {!isFetching && !resultados.length && debouncedQ && (
             <p className="text-sm text-muted-foreground px-4 py-6 text-center">
               Sin resultados para esta búsqueda.
             </p>
           )}
 
           {resultados.length > 0 && (
-            <div className="overflow-x-auto border-t">
-              <table className="w-full text-xs">
-                <thead className="bg-neutral-50">
-                  <tr>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground">Producto</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground">Categoría</th>
-                    <th className="px-4 py-2 text-left font-medium text-muted-foreground">Fuentes</th>
-                    <th className="px-4 py-2 text-right font-medium text-muted-foreground">Precio desde</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {resultados.map((prod: ModalResult) => {
-                    const prices = Object.values(prod.fuentes).map((f) => (f as { precio: number }).precio)
-                    const minPrice = Math.min(...prices)
-                    const inCart = has(prod.id)
-                    return (
+            <>
+              {/* Desktop: table */}
+              <div className="hidden sm:block overflow-x-auto border-t">
+                <table className="w-full text-xs">
+                  <thead className="bg-neutral-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-muted-foreground">Producto</th>
+                      <th className="px-4 py-2 text-left font-medium text-muted-foreground">Categoría</th>
+                      <th className="px-4 py-2 text-left font-medium text-muted-foreground">Fuentes</th>
+                      <th className="px-4 py-2 text-right font-medium text-muted-foreground">Precio desde</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultados.map((prod: ModalResult) => (
                       <tr key={prod.id} className="border-t border-neutral-100 hover:bg-neutral-50">
                         <td className="px-4 py-2 font-medium">{prod.nombre}</td>
                         <td className="px-4 py-2 text-muted-foreground whitespace-nowrap">
@@ -108,30 +142,40 @@ function CartSearchModal({
                           </div>
                         </td>
                         <td className="px-4 py-2 text-right whitespace-nowrap font-semibold">
-                          ${fmt(minPrice)}
+                          ${fmt(minPrice(prod))}
                         </td>
                         <td className="px-4 py-2 text-right">
-                          {inCart ? (
-                            <span className="text-green-600 font-semibold text-xs">✓ Agregado</span>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                add(prod.id)
-                                toast.success(`${prod.nombre} agregado al carrito`)
-                                onClose()
-                              }}
-                              className="bg-blue-600 text-white text-xs px-2.5 py-1 rounded hover:bg-blue-700 transition-colors"
-                            >
-                              Agregar
-                            </button>
-                          )}
+                          <AddControl prod={prod} inCart={has(prod.id)} onAdd={handleAdd} />
                         </td>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: stacked cards */}
+              <div className="sm:hidden border-t">
+                {resultados.map((prod: ModalResult) => (
+                  <div key={prod.id} className="border-b border-neutral-100 px-4 py-3">
+                    <div className="font-medium text-sm">{prod.nombre}</div>
+                    {prod.categoria && (
+                      <div className="text-xs text-muted-foreground mt-0.5">{prod.categoria}</div>
+                    )}
+                    <div className="flex gap-1 flex-wrap mt-1.5">
+                      {Object.keys(prod.fuentes).map((f) => (
+                        <FuenteChip key={f} fuente={f} />
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-sm font-semibold">
+                        desde ${fmt(minPrice(prod))}
+                      </span>
+                      <AddControl prod={prod} inCart={has(prod.id)} onAdd={handleAdd} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
 
           {/* Modal pagination */}
