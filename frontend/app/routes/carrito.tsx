@@ -2,11 +2,14 @@ import { useState } from "react"
 import { Link } from "react-router"
 import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { X, Search } from "lucide-react"
+import { X, Search, Download } from "lucide-react"
 import type { Route } from "./+types/carrito"
 import { api } from "~/shared/lib/api"
 import { useDebounce } from "~/shared/lib/useDebounce"
 import { useCartStore } from "~/shared/stores/cart"
+import { downloadChecklist } from "~/shared/lib/exportChecklist"
+import { formatPrice } from "~/shared/lib/formatPrice"
+import type { CartItem, CartGroup, CartData } from "~/shared/types/cart"
 import { FuenteChip } from "~/shared/ui/FuenteChip"
 import { Card, CardContent } from "~/shared/ui/shadcn/card"
 import {
@@ -20,8 +23,7 @@ export function meta(_: Route.MetaArgs) {
   return [{ title: "Mi Carrito — Price Tracker" }]
 }
 
-const fmt = (n: number) =>
-  n?.toLocaleString("es-AR", { maximumFractionDigits: 0 })
+const fmt = formatPrice
 
 // ── Cart-search modal ─────────────────────────────────────────────────────
 
@@ -142,7 +144,7 @@ function CartSearchModal({
                           </div>
                         </td>
                         <td className="px-4 py-2 text-right whitespace-nowrap font-semibold">
-                          ${fmt(minPrice(prod))}
+                          {fmt(minPrice(prod))}
                         </td>
                         <td className="px-4 py-2 text-right">
                           <AddControl prod={prod} inCart={has(prod.id)} onAdd={handleAdd} />
@@ -168,7 +170,7 @@ function CartSearchModal({
                     </div>
                     <div className="flex items-center justify-between mt-2">
                       <span className="text-sm font-semibold">
-                        desde ${fmt(minPrice(prod))}
+                        desde {fmt(minPrice(prod))}
                       </span>
                       <AddControl prod={prod} inCart={has(prod.id)} onAdd={handleAdd} />
                     </div>
@@ -217,14 +219,17 @@ export default function Carrito(_: Route.ComponentProps) {
 
   const { data: cartData, isLoading: cartLoading } = useQuery({
     queryKey: ["carrito", ids],
-    queryFn: () => api.post("/api/v1/carrito", { ids }).then((r) => r.data),
+    queryFn: () =>
+      api
+        .post<CarritoApiResponse>("/api/v1/carrito", { ids })
+        .then((r) => r.data),
     enabled: ids.length > 0,
     staleTime: 2 * 60 * 1000,
   })
 
   // Build name lookup from cart API response
   const productNames: Record<number, string> = {}
-  cartData?.productos?.forEach((p: { id: number; nombre: string }) => {
+  cartData?.productos?.forEach((p) => {
     productNames[p.id] = p.nombre
   })
 
@@ -232,17 +237,34 @@ export default function Carrito(_: Route.ComponentProps) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold">Mi carrito</h1>
-        {ids.length > 0 && (
-          <button
-            onClick={() => {
-              clear()
-              toast("Carrito vaciado")
-            }}
-            className="text-sm text-red-500 hover:text-red-700 border border-red-300 rounded px-3 py-1 transition-colors"
-          >
-            Limpiar todo
-          </button>
-        )}
+        <div className="flex gap-2">
+          {(cartData?.carrito?.length ?? 0) > 0 && (
+            <button
+              onClick={() => {
+                const ok = downloadChecklist(cartData!)
+                if (ok) {
+                  toast.success("Lista descargada")
+                } else {
+                  toast.error("No se pudo descargar la lista")
+                }
+              }}
+              className="text-sm text-blue-600 hover:text-blue-800 border border-blue-300 rounded px-3 py-1 transition-colors flex items-center gap-1"
+            >
+              <Download size={14} /> Descargar lista
+            </button>
+          )}
+          {ids.length > 0 && (
+            <button
+              onClick={() => {
+                clear()
+                toast("Carrito vaciado")
+              }}
+              className="text-sm text-red-500 hover:text-red-700 border border-red-300 rounded px-3 py-1 transition-colors"
+            >
+              Limpiar todo
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Search input */}
@@ -310,15 +332,15 @@ export default function Carrito(_: Route.ComponentProps) {
         <p className="text-xs text-muted-foreground mb-3">Buscando precios…</p>
       )}
 
-      {cartData?.no_encontrados?.length > 0 && (
+      {(cartData?.no_encontrados?.length ?? 0) > 0 && (
         <div className="border border-yellow-300 bg-yellow-50 rounded p-3 text-sm text-yellow-800 mb-4">
           <strong>Productos no encontrados:</strong>{" "}
-          {cartData.no_encontrados.map((i: number) => `#${i}`).join(", ")}
+          {cartData!.no_encontrados!.map((i: number) => `#${i}`).join(", ")}
         </div>
       )}
 
       {/* Optimal cart */}
-      {cartData?.carrito?.length > 0 && (
+      {(cartData?.carrito?.length ?? 0) > 0 && (
         <div>
           <h2 className="text-base font-semibold mb-3">
             Carrito óptimo{" "}
@@ -327,7 +349,7 @@ export default function Carrito(_: Route.ComponentProps) {
             </span>
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            {cartData.carrito.map((bloque: CartGroup) => (
+            {cartData!.carrito.map((bloque: CartGroup) => (
               <div
                 key={bloque.fuente}
                 className="rounded border shadow-sm overflow-hidden"
@@ -347,14 +369,14 @@ export default function Carrito(_: Route.ComponentProps) {
                           <div className="font-medium">{item.nombre}</div>
                           {item.ahorro > 0 && (
                             <div className="text-green-700 font-semibold">
-                              ahorrás ${fmt(item.ahorro)}
+                              ahorrás {fmt(item.ahorro)}
                             </div>
                           )}
                         </td>
                         <td className="px-3 py-1.5 text-right whitespace-nowrap">
-                          <div className="font-semibold text-green-700">${fmt(item.precio)}</div>
+                          <div className="font-semibold text-green-700">{fmt(item.precio)}</div>
                           {item.precio_max > item.precio && (
-                            <div className="text-muted-foreground line-through">${fmt(item.precio_max)}</div>
+                            <div className="text-muted-foreground line-through">{fmt(item.precio_max)}</div>
                           )}
                         </td>
                       </tr>
@@ -364,13 +386,13 @@ export default function Carrito(_: Route.ComponentProps) {
                     <tr className="border-t border-neutral-200 bg-neutral-50">
                       <td className="px-3 py-1.5 font-bold">Total</td>
                       <td className="px-3 py-1.5 text-right font-bold text-green-700">
-                        ${fmt(bloque.total)}
+                        {fmt(bloque.total)}
                       </td>
                     </tr>
                     {bloque.ahorro_total > 0 && (
                       <tr>
                         <td colSpan={2} className="px-3 py-1 text-center text-[0.7rem] text-green-700">
-                          Ahorro vs precio más caro: ${fmt(bloque.ahorro_total)}
+                          Ahorro vs precio más caro: {fmt(bloque.ahorro_total)}
                         </td>
                       </tr>
                     )}
@@ -389,23 +411,13 @@ export default function Carrito(_: Route.ComponentProps) {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-interface CartItem {
-  id: number
-  nombre: string
-  precio: number
-  precio_max: number
-  ahorro: number
-  url: string
-}
-interface CartGroup {
-  fuente: string
-  productos: CartItem[]
-  total: number
-  ahorro_total: number
-}
 interface ModalResult {
   id: number
   nombre: string
   categoria: string
   fuentes: Record<string, unknown>
+}
+interface CarritoApiResponse extends CartData {
+  productos: { id: number; nombre: string }[]
+  fuentes: string[]
 }
