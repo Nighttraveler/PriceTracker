@@ -23,7 +23,10 @@ services:
       DATABASE_URL: postgresql://user:password@db:5432/price_tracker
       TZ: 'America/Argentina/Buenos_Aires'
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
-      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-120}
+      # Kill a runaway query at the DB level so it can't pile up and starve the
+      # Pi's CPU (should stay well below GUNICORN_TIMEOUT).
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-30000}
       # Origins the *browser* loads the frontend from (comma-separated).
       CORS_ORIGIN: ${CORS_ORIGIN:-http://pricetracker.home.arpa,https://pricetracker.home.arpa,http://pricetracker.home.arpa:3000,http://localhost:3000}
     ports:

@@ -34,7 +34,12 @@ class Database:
 
     def _pg_connect(self):
         import psycopg2
-        conn = psycopg2.connect(self._pg_url)
+        # Cap query runtime so a slow query dies cleanly instead of piling up
+        # and starving the Pi's CPU (see the dashboard retry-storm incident).
+        timeout_ms = os.environ.get("DB_STATEMENT_TIMEOUT_MS", "30000")
+        conn = psycopg2.connect(
+            self._pg_url, options=f"-c statement_timeout={timeout_ms}"
+        )
         conn.autocommit = True
         return conn
 
